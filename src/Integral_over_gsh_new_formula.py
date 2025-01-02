@@ -195,126 +195,130 @@ def integral_over_6gsh(l, N, m):
 
     return 4*np.pi*(-1)**(N[4]+N[5]+m[4]+m[5])*ga(l[4])*ga(l[5])*result
 
+def main():
+    pass
+    # TEST AREA
+    '''
+    #3 GSH
+    l1=50
+    l2=4
+    l3=2
+    N1=3
+    N2=3
+    N3=1
+    m1=-1
+    m2=0
+    m3=-1
+    start_time = time.time()
+    int_new=float(integral_over_3gsh([l1,l2,l3],[N1,N2,N3],[m1,m2,m3]))
+    print(int_new)
+    end_time = time.time()
+    print("Elapsed time new formula:", end_time - start_time, "seconds")
+    
+    start_time = time.time()
+    int_old=float(int_3gsh_old([l1,l2,l3],[N1,N2,N3],[m1,m2,m3]))
+    print(int_old)
+    end_time = time.time()
+    print("Elapsed time old formula:", end_time - start_time, "seconds")
+    diff=abs(int_new-int_old)
+    print('Differenze = ', float(diff))
+    '''
 
-# TEST AREA
-
-'''
-#3 GSH
-l1=50
-l2=4
-l3=2
-N1=3
-N2=3
-N3=1
-m1=-1
-m2=0
-m3=-1
-start_time = time.time()
-int_new=float(integral_over_3gsh([l1,l2,l3],[N1,N2,N3],[m1,m2,m3]))
-print(int_new)
-end_time = time.time()
-print("Elapsed time new formula:", end_time - start_time, "seconds")
-
-start_time = time.time()
-int_old=float(int_3gsh_old([l1,l2,l3],[N1,N2,N3],[m1,m2,m3]))
-print(int_old)
-end_time = time.time()
-print("Elapsed time old formula:", end_time - start_time, "seconds")
-diff=abs(int_new-int_old)
-print('Differenze = ', float(diff))
-'''
-'''
-#4 GSH
-l1=5
-l2=4
-l3=4
-l4=2
-N1=4
-N2=-4
-N3=0
-N4=-2
-m1=-2
-m2=-1
-m3=0
-m4=-1
-start_time = time.time()
-int_new=float(integral_over_4gsh([l1,l2,l3,l4],[N1,N2,N3,N4],[m1,m2,m3,m4]))
-print(int_new)
-end_time = time.time()
-print("Elapsed time new formula:", end_time - start_time, "seconds")
-
-start_time = time.time()
-int_old=float(int_4gsh_old([l1,l2,l3,l4],[N1,N2,N3,N4],[m1,m2,m3,m4]))
-print(int_old)
-end_time = time.time()
-print("Elapsed time old formula:", end_time - start_time, "seconds")
-diff=abs(int_new-int_old)
-print('Differenze = ', float(diff))
-'''
-'''
-#5 GSH
-l1=5
-l2=3
-l3=4
-l4=1
-l5=2
-N1=3
-N2=-2
-N3=0
-N4=-1
-N5=2
-m1=3
-m2=1
-m3=0
-m4=1
-m5=1
-start_time = time.time()
-int_new=float(integral_over_5gsh([l1,l2,l3,l4,l5],[N1,N2,N3,N4,N5],[m1,m2,m3,m4,m5]))
-print(int_new)
-end_time = time.time()
-print("Elapsed time new formula:", end_time - start_time, "seconds")
-
-start_time = time.time()
-int_old=float(int_5gsh_old([l1,l2,l3,l4,l5],[N1,N2,N3,N4,N5],[m1,m2,m3,m4,m5]))
-print(int_old)
-end_time = time.time()
-print("Elapsed time old formula:", end_time - start_time, "seconds")
-diff=abs(int_new-int_old)
-print('Differenze = ', float(diff))
-'''
+    '''
+    #4 GSH
+    l1=5
+    l2=4
+    l3=4
+    l4=2
+    N1=4
+    N2=-4
+    N3=0
+    N4=-2
+    m1=-2
+    m2=-1
+    m3=0
+    m4=-1
+    start_time = time.time()
+    int_new=float(integral_over_4gsh([l1,l2,l3,l4],[N1,N2,N3,N4],[m1,m2,m3,m4]))
+    print(int_new)
+    end_time = time.time()
+    print("Elapsed time new formula:", end_time - start_time, "seconds")
+    
+    start_time = time.time()
+    int_old=float(int_4gsh_old([l1,l2,l3,l4],[N1,N2,N3,N4],[m1,m2,m3,m4]))
+    print(int_old)
+    end_time = time.time()
+    print("Elapsed time old formula:", end_time - start_time, "seconds")
+    diff=abs(int_new-int_old)
+    print('Differenze = ', float(diff))
+    '''
+    '''
+    #5 GSH
+    l1=5
+    l2=3
+    l3=4
+    l4=1
+    l5=2
+    N1=3
+    N2=-2
+    N3=0
+    N4=-1
+    N5=2
+    m1=3
+    m2=1
+    m3=0
+    m4=1
+    m5=1
+    start_time = time.time()
+    int_new=float(integral_over_5gsh([l1,l2,l3,l4,l5],[N1,N2,N3,N4,N5],[m1,m2,m3,m4,m5]))
+    print(int_new)
+    end_time = time.time()
+    print("Elapsed time new formula:", end_time - start_time, "seconds")
+    
+    start_time = time.time()
+    int_old=float(int_5gsh_old([l1,l2,l3,l4,l5],[N1,N2,N3,N4,N5],[m1,m2,m3,m4,m5]))
+    print(int_old)
+    end_time = time.time()
+    print("Elapsed time old formula:", end_time - start_time, "seconds")
+    diff=abs(int_new-int_old)
+    print('Differenze = ', float(diff))
+    '''
 
 
-'''
-#6 GSH
-l1=5
-l2=3
-l3=4
-l4=1
-l5=2
-l6=1
-N1=3
-N2=-2
-N3=0
-N4=-1
-N5=2
-N6=1
-m1=3
-m2=1
-m3=0
-m4=1
-m5=1
-m6=0
-start_time = time.time()
-int_new=float(integral_over_6gsh([l1,l2,l3,l4,l5,l6],[N1,N2,N3,N4,N5,N6],[m1,m2,m3,m4,m5,m6]))
-print(int_new)
-end_time = time.time()
-print("Elapsed time new formula:", end_time - start_time, "seconds")
+    '''
+    #6 GSH
+    l1=5
+    l2=3
+    l3=4
+    l4=1
+    l5=2
+    l6=1
+    N1=3
+    N2=-2
+    N3=0
+    N4=-1
+    N5=2
+    N6=1
+    m1=3
+    m2=1
+    m3=0
+    m4=1
+    m5=1
+    m6=0
+    start_time = time.time()
+    int_new=float(integral_over_6gsh([l1,l2,l3,l4,l5,l6],[N1,N2,N3,N4,N5,N6],[m1,m2,m3,m4,m5,m6]))
+    print(int_new)
+    end_time = time.time()
+    print("Elapsed time new formula:", end_time - start_time, "seconds")
+    
+    start_time = time.time()
+    int_old=float(int_6gsh_old([l1,l2,l3,l4,l5,l6],[N1,N2,N3,N4,N5,N6],[m1,m2,m3,m4,m5,m6]))
+    print(int_old)
+    end_time = time.time()
+    print("Elapsed time old formula:", end_time - start_time, "seconds")
+    diff=abs(int_new-int_old)
+    print('Differenze = ', float(diff))
+    '''
 
-start_time = time.time()
-int_old=float(int_6gsh_old([l1,l2,l3,l4,l5,l6],[N1,N2,N3,N4,N5,N6],[m1,m2,m3,m4,m5,m6]))
-print(int_old)
-end_time = time.time()
-print("Elapsed time old formula:", end_time - start_time, "seconds")
-diff=abs(int_new-int_old)
-print('Differenze = ', float(diff))
-'''
+if __name__== '__main__':
+    main()

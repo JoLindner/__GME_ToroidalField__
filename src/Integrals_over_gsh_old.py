@@ -178,52 +178,56 @@ def integral_over_6gsh(l, N, m):
 
     return float(result)
 
+def main():
+    pass
+    '''
+    # TEST_AREA
+    l1 = 4
+    l2 = 4
+    l3 = 4
+    l4 = 4
+    l = [l1, l2, l3, l4]
+    m1 = 2
+    m2 = 1
+    m3 = 1
+    m4 = 0
+    m = [m1, m2, m3, m4]
+    N1 = 2
+    N2 = 1
+    N3 = 1
+    N4 = -1
+    N = [N1, N2, N3, N4]
+    
+    start_time = time.time()
+    test1 = integral_over_4gsh(l, N, m)
+    end_time = time.time()
+    print("Elapsed time:", end_time - start_time, "seconds")
+    print(test1)
+    '''
+    '''
+    #print(integral_glp(1,1,0))
+    
+    l_list=[1,1,1,1]
+    m_list=[0,0,0,0]
+    N_list=[0,0,1,1]
+    
+    print(integral_over_4gsh(l_list, N_list, m_list))
+    
+    
+    
+    l_list=[1,1,1,1,1]
+    m_list=[1,0,1,0,0]
+    N_list=[0,0,1,1,1]
+    
+    print(integral_over_5gsh(l_list, N_list, m_list))
+    
+    
+    l_list=[1,1,1,1,1,1]
+    m_list=[1,1,0,0,0,0]
+    N_list=[0,0,1,1,1,1]
+    
+    print(integral_over_6gsh(l_list, N_list, m_list))
+    '''
 
-'''
-# TEST_AREA
-l1 = 4
-l2 = 4
-l3 = 4
-l4 = 4
-l = [l1, l2, l3, l4]
-m1 = 2
-m2 = 1
-m3 = 1
-m4 = 0
-m = [m1, m2, m3, m4]
-N1 = 2
-N2 = 1
-N3 = 1
-N4 = -1
-N = [N1, N2, N3, N4]
-
-start_time = time.time()
-test1 = integral_over_4gsh(l, N, m)
-end_time = time.time()
-print("Elapsed time:", end_time - start_time, "seconds")
-print(test1)
-'''
-'''
-#print(integral_glp(1,1,0))
-
-l_list=[1,1,1,1]
-m_list=[0,0,0,0]
-N_list=[0,0,1,1]
-
-print(integral_over_4gsh(l_list, N_list, m_list))
-
-
-
-l_list=[1,1,1,1,1]
-m_list=[1,0,1,0,0]
-N_list=[0,0,1,1,1]
-
-print(integral_over_5gsh(l_list, N_list, m_list))
-
-
-l_list=[1,1,1,1,1,1]
-m_list=[1,1,0,0,0,0]
-N_list=[0,0,1,1,1,1]
-
-print(integral_over_6gsh(l_list, N_list, m_list))
-'''
+if __name__== '__main__':
+    main()
