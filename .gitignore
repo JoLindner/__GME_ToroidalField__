@@ -1,0 +1,14 @@
+# Ignore virtual environment folders
+.venv/
+
+# Ignore IDE/editor files
+.idea/
+
+# Ignore Data and Output directories inside the src folder
+src/Data/
+src/Output/
+src/Output_combined/
+src/Images
+
+# Ignore Python bytecode cache in src/__pycache__ folder
+src/__pycache__/
