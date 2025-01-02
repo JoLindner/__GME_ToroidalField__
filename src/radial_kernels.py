@@ -6,6 +6,7 @@ from scipy.special import sph_harm
 import mesa_reader as mr
 from constants import c_const as co
 import os
+from config import ConfigHandler
 
 
 def radial_integration(r, func):
@@ -22,23 +23,27 @@ def radial_integration(r, func):
     return integral
 
 def MESA_structural_data(plot_rho_deriv=False):
+    # Initialize configuration handler
+    config = ConfigHandler("config.ini")
+
+    # Load stellar model
+    log_folder = config.get("StellarModel", "mesa_LOGS")
     DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'Stellar_model')
+    LOGS = mr.MesaLogDir(os.path.join(DATA_DIR, log_folder))
+    his = mr.MesaData(os.path.join(DATA_DIR, log_folder, 'history.data'))
 
-    #Change these paths to add own stellar model from MESA LOGS
-    LOGS = mr.MesaLogDir(os.path.join(DATA_DIR, 'MESA_simplex_solar_calibration'))
-    his = mr.MesaData(os.path.join(DATA_DIR, 'MESA_simplex_solar_calibration/history.data'))
-
-    Sun_lastprofile = LOGS.profile_data()    #1 M_sun star evolved to 4.57 Gyr age
-    deriv_lnRho=Sun_lastprofile.dlnRho_dr
-    rho_0=np.power(10,Sun_lastprofile.logRho)  #rho_0 at outer boundary of zone in g/cm$^3$
-    radius_array = 10**Sun_lastprofile.logR  #log10(r/R_sun) at outer boundary of zone
+    Star_lastprofile = LOGS.profile_data()
+    deriv_lnRho = Star_lastprofile.dlnRho_dr
+    rho_0 = np.power(10, Star_lastprofile.logRho)  #rho_0 at outer boundary of zone in g/cm$^3$
+    radius_array = np.power(10, Star_lastprofile.logR)  #r/R_sun at outer boundary of zone
     #READ OUT HISTORY VARIABLES
     R_sun=his.rsun  #cm
+
 
     if plot_rho_deriv==True:
         plt.figure(figsize=(11,8))
         plt.plot(radius_array, deriv_lnRho, label='Density gradient', color='red')
-        plt.xlim(0.95, 1.1)
+        plt.xlim(radius_array[0]*0.95, radius_array[0]*1.1)
         #plt.ylim(-50, 400)
         plt.xlabel('r/R_Sun')
         plt.ylabel('d/dr ln(rho_0)')
@@ -48,7 +53,7 @@ def MESA_structural_data(plot_rho_deriv=False):
 
         plt.figure(figsize=(11,8))
         plt.plot(radius_array, rho_0, label='Density', color='red')
-        plt.xlim(0, 1.1)
+        plt.xlim(0, radius_array[0]*1.1)
         #plt.ylim(-50, 400)
         plt.xlabel('r/R_Sun')
         plt.ylabel('rho$_0$ in g/cm$^3$')
@@ -57,7 +62,7 @@ def MESA_structural_data(plot_rho_deriv=False):
         plt.show()
 
 
-    return radius_array[::-1], deriv_lnRho[::-1], rho_0[::-1], R_sun    #reversed to start from 0 to R_sun
+    return radius_array[::-1], deriv_lnRho[::-1], rho_0[::-1], R_sun    #reversed to start from 0 to R_star
 
 def magnetic_field(magnetic_field,radius_array=np.linspace(0, 1, 5000), plot_a=False ,plot_a_deriv=False, plot_B=False):
     #read in magnetic field model
@@ -164,7 +169,7 @@ def magnetic_field(magnetic_field,radius_array=np.linspace(0, 1, 5000), plot_a=F
                 x_ticks.append(r * np.cos(theta))
                 y_ticks.append(r * np.sin(theta))
         plt.scatter(x_ticks, y_ticks, color='gray', s=0.1)
-        plt.savefig(f'MagneticFieldA.png', dpi=300, bbox_inches='tight')
+        #plt.savefig(f'MagneticFieldA.png', dpi=300, bbox_inches='tight')
         plt.show()
 
     
@@ -176,8 +181,6 @@ def ticks_symmetric(vmin,vmax):
     ticks_combined= np.concatenate((ticks, -ticks))
     
     return ticks_combined
-
-
 
 def eigenfunctions(l,n,radius_array=np.linspace(0, 1, 5000),plot_eigenfunction=False,plot_deriv=False, plot_diff=False):
     name_string="detail.l"+str(l)+".n+"+str(n)+".h5"
@@ -278,7 +281,6 @@ def eigenfunctions(l,n,radius_array=np.linspace(0, 1, 5000),plot_eigenfunction=F
         plt.show()
 
     return xi_r(radius_array), xi_h(radius_array), xi_r_spline(radius_array, nu=1), xi_h_spline(radius_array,nu=1), xi_r_spline(radius_array, nu=2), xi_h_spline(radius_array, nu=2)
-
 
 #Radial Kernels
 def R1(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
@@ -499,6 +501,7 @@ def R8(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=Non
     return radial_integration(radius_array, func*radius_array**2), func
 
 def plot_all_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None):
+    #Note: magnetic_field_sprime is not used here and is assumed to be None
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
     
@@ -524,6 +527,10 @@ def plot_all_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s,magne
     plt.show()
 
 def plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None):
+    #Note: magnetic_field_sprime is not used here and is assumed to be None
+    if magnetic_field_sprime is None:
+        magnetic_field_sprime = magnetic_field_s
+
     if len(l)>10:
         print('Can only plot up to 10 different radial kernels')
         return
@@ -570,6 +577,10 @@ def plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s,m
     #plt.show()
 
 def plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None):
+    #Note: magnetic_field_sprime is not used here and is assumed to be None
+    if magnetic_field_sprime is None:
+        magnetic_field_sprime = magnetic_field_s
+
     if len(l)>10:
         print('Can only plot up to 10 different radial kernels')
         return
@@ -640,14 +651,23 @@ class MagneticField:
         self.s = s  # harmonic degree
 
 def main():
+    # Initialize configuration handler
+    config = ConfigHandler("config.ini")
+
 
     #magnetic field:
-    magnetic_field_modelA = MagneticField(B_max=300, mu=0.713, sigma=0.05, s=2)
+    B_max = config.getfloat("MagneticFieldModel", "B_max")
+    mu = config.getfloat("MagneticFieldModel", "mu")
+    sigma = config.getfloat("MagneticFieldModel", "sigma")
+    s = config.getfloat("MagneticFieldModel", "s")
+
+    # Initialize the magnetic field model
+    magnetic_field_s = MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s)
 
     #extract radius_array from MESA_structural_data
-    radius_array=MESA_structural_data()[0]
+    radius_array=MESA_structural_data(False)[0]
 
-    magnetic_field(magnetic_field_modelA,radius_array, False, False, False)
+    magnetic_field(magnetic_field_s, radius_array, False, False, False)
 
     #TEST AREA:
 
@@ -657,31 +677,31 @@ def main():
     n=[12,12,12,12,12]
     lprime=[5,38,94,141,237]
     nprime=[12,6,3,2,1]
-    plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field_modelA)
-    #plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_modelA)
+    plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field_s)
+    #plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
     '''
     '''
     l=[140]
     n=[10]
     lprime=[140]
     nprime=[10]
-    plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_modelA)
+    plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
     '''
-
+    '''
     l=[5,5,5,5]
     n=[18,18,18,18]
     lprime=[5,29,42,225]
     nprime=[18,12,10,3]
-    #plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_modelA)
-    plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field_modelA)
-
+    #plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
+    plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field_s)
+    '''
     #Plot radial kernels of l=5 n=0 eigenspace
     '''
     lprime=[5,5,5,5,5]
     nprime=[0,0,0,0,0]
     l=[3,4,5,6,7]
     n=[1,0,0,0,0]
-    plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_modelA)
+    plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
      '''
     '''
     #Plot radial kernels of l=5 n=6 eigenspace
@@ -689,33 +709,33 @@ def main():
     n=[6,6,6,6,6,6,6]
     lprime=[2,5,9,23,66,154,155]
     nprime=[7,6,5,3,1,0,0]
-    plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field_modelA)
+    plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field_s)
     '''
     '''
     lprime=[5,5,5]
     nprime=[6,6,6]
     l=[66,154,155]
     n=[1,0,0]
-    plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_modelA)
+    plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
     '''
     #eigenfunctions(l,n, radius_array, False, False, plot_diff = False)
     #eigenfunctions(lprime,nprime, radius_array, False, False)
     #MESA_structural_data(False)
 
     '''
-    plot_all_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_modelA)
+    plot_all_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
 
     print('For [l,n,lprime,nprime]=['+str(l),str(n),str(lprime),str(nprime)+'] and a magnetic_field with [B_max,mu,sigma,s]=['\
-          ,str(magnetic_field_modelA.B_max),str(magnetic_field_modelA.mu),str(magnetic_field_modelA.sigma),str(magnetic_field_modelA.s)+']\n')
+          ,str(magnetic_field_s.B_max),str(magnetic_field_s.mu),str(magnetic_field_s.sigma),str(magnetic_field_s.s)+']\n')
 
-    print('R1='+str(R1(l,n,lprime,nprime,radius_array,magnetic_field_modelA,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R2='+str(R2(l,n,lprime,nprime,radius_array,magnetic_field_modelA,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R3='+str(R3(l,n,lprime,nprime,radius_array,magnetic_field_modelA,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R4='+str(R4(l,n,lprime,nprime,radius_array,magnetic_field_modelA,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R5='+str(R5(l,n,lprime,nprime,radius_array,magnetic_field_modelA,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R6='+str(R6(l,n,lprime,nprime,radius_array,magnetic_field_modelA,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R7='+str(R7(l,n,lprime,nprime,radius_array,magnetic_field_modelA,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R8='+str(R8(l,n,lprime,nprime,radius_array,magnetic_field_modelA,plot_kernel=True)[0])+' kG^2*R_sun^3')
+    print('R1='+str(R1(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
+    print('R2='+str(R2(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
+    print('R3='+str(R3(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
+    print('R4='+str(R4(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
+    print('R5='+str(R5(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
+    print('R6='+str(R6(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
+    print('R7='+str(R7(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
+    print('R8='+str(R8(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
     '''
 
 if __name__== '__main__':
