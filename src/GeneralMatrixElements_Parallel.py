@@ -5,57 +5,74 @@ import os
 import pygyre as pg
 import concurrent.futures
 import time
-import sqlite3
 import matplotlib.pyplot as plt
 from matplotlib.colors import SymLogNorm
 from matplotlib.colors import ListedColormap
+from config import ConfigHandler
+import duckdb
+
 
 def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime=None):
-    name_string=f'gme_results.db'
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', 'GeneralMatrixElements', name_string)
-    max_retries = 10
-    backoff_factor=1
+    # Initialize configuration handler
+    config = ConfigHandler("config.ini")
+    #Load Model name
+    model_name = config.get("ModelConfig", "model_name")
+    if not model_name:
+        raise ValueError("The 'model_name' could not be fetched from the config.ini file under [ModelConfig] section.")
 
-    for attempt in range(max_retries):
-        try:
-            conn = sqlite3.connect(DATA_DIR, timeout=15)
-            cursor = conn.cursor()
-            cursor.execute('''CREATE TABLE IF NOT EXISTS gme_results (
+    #Output directory initialization
+    db_name_string = f'gme_results_{model_name}.db'
+    output_dir = os.path.join(os.path.dirname(__file__), 'Output')
+    model_output_dir = os.path.join(output_dir, model_name)
+    os.makedirs(model_output_dir, exist_ok=True)
+    gme_dir = os.path.join(model_output_dir, 'GeneralMatrixElements')
+    os.makedirs(gme_dir, exist_ok=True)
+    DATA_DIR = os.path.join(gme_dir, db_name_string)
+
+    try:
+        conn = duckdb.connect(database=DATA_DIR)
+        cursor = conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS gme_results (
                                 l INTEGER,
                                 n INTEGER,
                                 m INTEGER,
                                 lprime INTEGER,
                                 nprime INTEGER,
                                 mprime INTEGER,
-                                result REAL,
+                                result DOUBLE,
                                 PRIMARY KEY (l, n, m, lprime, nprime, mprime)
                               )''')
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS gme_results_indexed ON gme_results (l, n, m, lprime, nprime, mprime)
-            ''')
 
-            cursor.execute('''SELECT result FROM gme_results WHERE l=? AND n=? AND m=? AND lprime=? AND nprime=? AND mprime=?''',
+        # Check if the result already exists
+        cursor.execute('''SELECT result FROM gme_results WHERE l=? AND n=? AND m=? AND lprime=? AND nprime=? AND mprime=?''',
                            (l, n, m, lprime, nprime, mprime))
-            result_row = cursor.fetchone()
+        result_row = cursor.fetchone()
 
-            if result_row is not None:
-                conn.close()
-                return result_row[0]
+        #Return the GME if it already exists
+        if result_row is not None:
+            return result_row[0]
 
+        #Magnetic fields
+        if magnetic_field_sprime == None:
+            magnetic_field_sprime = magnetic_field_s
+        s = magnetic_field_s.s
+        sprime = magnetic_field_sprime.s
 
-            if magnetic_field_sprime == None:
-                magnetic_field_sprime = magnetic_field_s
-            if m != mprime:
-                return 0.0
+        #First selection rule
+        if m != mprime:
+            return 0.0
 
-            s = magnetic_field_s.s
-            sprime = magnetic_field_sprime.s
-            radius_array = radial_kernels.MESA_structural_data()[0]
-            R_args = (l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime)
-            S_args = (lprime, l, s, sprime, mprime, m)
+        #Second selection rule
+        if (l+lprime+s+sprime) % 2 == 1:
+            return 0.0
 
-            #H_k',k
-            general_matrix_element=1/(4*np.pi)*(radial_kernels.R1(*R_args)[0]*angular_kernels.S1(*S_args)\
+        #GME
+        radius_array = radial_kernels.MESA_structural_data()[0]
+        R_args = (l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime)
+        S_args = (lprime, l, s, sprime, mprime, m)
+
+        #H_k',k
+        general_matrix_element=1/(4*np.pi)*(radial_kernels.R1(*R_args)[0]*angular_kernels.S1(*S_args)\
                                                 +radial_kernels.R2(*R_args)[0]*(angular_kernels.S2(*S_args)-angular_kernels.S5(*S_args))\
                                                 -radial_kernels.R3(*R_args)[0]*(angular_kernels.S3(*S_args)+angular_kernels.S6(*S_args))\
                                                 +radial_kernels.R4(*R_args)[0]*angular_kernels.S4(*S_args)\
@@ -67,26 +84,30 @@ def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime
                                                 -radial_kernels.R7(*R_args)[0]*angular_kernels.S17(*S_args)\
                                                 -radial_kernels.R8(*R_args)[0]*angular_kernels.S21(*S_args))
 
-            #SAVES ONLY modes with m=m' INTO DB
-            cursor.execute('''INSERT INTO gme_results (l, n, m, lprime, nprime, mprime, result) 
+        #SAVES ONLY modes that fulfill the selection rules, i.e. are non-zero, INTO DB
+        cursor.execute('''INSERT INTO gme_results (l, n, m, lprime, nprime, mprime, result) 
                               VALUES (?, ?, ?, ?, ?, ?, ?)''',
                            (l, n, m, lprime, nprime, mprime, general_matrix_element))
-            conn.commit()
+        conn.commit()
+        print(f'Saved GM: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}, result={general_matrix_element}')
+        return general_matrix_element
+
+    except duckdb.Error as e:
+        # Catch database errors and raise appropriate messages
+        print(f"Database error occurred: {e}")
+        conn.rollback()  # In case of failure, rollback any changes made during the transaction
+        raise e  # Re-raise the error to allow the calling function to handle it
+    except Exception as e:
+        # Catch other errors (e.g., programming errors)
+        print(f"An error occurred: {e}")
+        raise e  # Re-raise to propagate the error
+
+    finally:
+        if conn:
             conn.close()
-            print(f'Saved GM: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}, result={general_matrix_element}')
-            return general_matrix_element
 
-        except sqlite3.OperationalError as e:
-            if 'database is locked' in str(e):
-                # Wait for a backoff period before retrying
-                wait_time = backoff_factor * (2 ** attempt)
-                print(f"Database locked, retrying in {wait_time:.2f} seconds...")
-                time.sleep(wait_time)
-            else:
-                raise  # Re-raise any other operational errors
 
-    #If all retries fail:
-    raise sqlite3.OperationalError(f"Unable to access the database after {max_retries} retries due to locking.")
+
 
 def normalization(l,n):
     radius_array = radial_kernels.MESA_structural_data()[0]
@@ -637,6 +658,10 @@ def plot_supermatrix_l5_n12(l, n, linthresh, trunc=None):
 
 #TEST AREA
 def main():
+    # Initialize configuration handler
+    config = ConfigHandler("config.ini")
+
+
     delta_freq_quadrat = 700  # microHz^2
 
     # Omega_ref
