@@ -84,6 +84,9 @@ def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime
                                                 -radial_kernels.R7(*R_args)[0]*angular_kernels.S17(*S_args)\
                                                 -radial_kernels.R8(*R_args)[0]*angular_kernels.S21(*S_args))
 
+        if general_matrix_element is None:
+            raise ValueError(f"The computed GME is None for the input parameters: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}.")
+
         #SAVES ONLY modes that fulfill the selection rules, i.e. are non-zero, INTO DB
         cursor.execute('''INSERT INTO gme_results (l, n, m, lprime, nprime, mprime, result) 
                               VALUES (?, ?, ?, ?, ?, ?, ?)''',
@@ -98,7 +101,7 @@ def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime
         conn.rollback()  # In case of failure, rollback any changes made during the transaction
         raise e  # Re-raise the error to allow the calling function to handle it
     except Exception as e:
-        # Catch other errors (e.g., programming errors)
+        # Catch other errors (e.g., programming errors, valueError)
         print(f"An error occurred: {e}")
         raise e  # Re-raise to propagate the error
 
@@ -107,11 +110,17 @@ def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime
             conn.close()
 
 def normalization(l,n):
+    #Get MESA structural data
     radius_array = radial_kernels.MESA_structural_data()[0]
     r_sun = radial_kernels.MESA_structural_data()[3]  # r_sun in cm
     rho_0 = radial_kernels.MESA_structural_data()[2]*r_sun**3 #g/R_sun^3
+    #Calculate function to integrate
     func = rho_0*(radial_kernels.eigenfunctions(l,n,radius_array)[0]**2+l*(l+1)*radial_kernels.eigenfunctions(l,n,radius_array)[1]**2)*radius_array**2
-    return radial_kernels.radial_integration(radius_array, func)  #g*R_sun^2
+    # Perform the radial integration
+    radial_integration_result = radial_kernels.radial_integration(radius_array, func) #g*R_sun^2
+    if radial_integration_result is None:
+        raise ValueError(f"Radial integration for normalization function failed for l={l} and n={n} and resulted in None.")
+    return radial_integration_result  # g*R_sun^2
 
 def frequencies_GYRE(l,n):
     try:
@@ -126,93 +135,111 @@ def frequencies_GYRE(l,n):
         filterd_freq=next(value for value in l_group.groups[l] if value['n_pg']==n)['freq'].real
 
     except FileNotFoundError as e:
-        error_message = f"File not found: {DATA_DIR}. Please check if the file exists in the 'Data/GYRE' directory."
-        print(error_message)
-        return error_message  # Return error message
+        error_message = f"File not found: {DATA_DIR}. Please check if the summary file exists in the 'Data/GYRE' directory."
+        raise FileNotFoundError(error_message)
     except KeyError as e:
         error_message = f"Key error: The expected data for l={l} and n={n} could not be found. Missing key: {e.args[0]}"
-        print(error_message)
-        return error_message  # Return error message
+        raise KeyError(error_message)
     except StopIteration:
-        error_message = f"No data found for l={l} and n={n}. Please check the input values."
-        print(error_message)
-        return error_message  # Return error message
+        #error_message = f"No data found for l={l} and n={n}. Please check the input values."
+        #raise
+        return None  # Return None, e.g. if l and n are out of range of existing frequencies
     except Exception as e:
         error_message = f"An unexpected error occurred: {e}"
-        print(error_message)
-        return error_message  # Return error message
+        raise Exception(error_message)
 
     return filterd_freq  #microHz
 
 def eigenspace(l,n, delta_freq_quadrat, eigen_tag=None):
-    #TAGS: Default/Full: full eigenspace; FirstApprox: first approximation; SelfCoupling: Only self-coupling (second Approximation)
+    try:
+        #TAGS: Default/Full: full eigenspace; FirstApprox: first approximation; SelfCoupling: Only self-coupling (second Approximation)
 
-    # doesnt matter here if I calculate the eigenspaces from the frequencies insteat of angular frequencies
-    freq_ref = frequencies_GYRE(l, n)
-    name_string = "summary_solar_test_suite.h5"
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE')
-    summary_file = pg.read_output(os.path.join(DATA_DIR, name_string))
-    K_space = []
+        # doesnt matter here if I calculate the eigenspaces from the frequencies insteat of angular frequencies
+        freq_ref = frequencies_GYRE(l, n)
 
-    if eigen_tag == None or eigen_tag=='Full':
-        #FULL EIGENSPACE
-        #delta_freq in microHz
-        for row in summary_file:
-            if abs(row['freq'].real**2-freq_ref**2) <= delta_freq_quadrat and row['l'] > 1:   #exclude l>1, since eq. A.19 breaks down for these cases
-                new_row = {
-                    'freq': row['freq'],
-                    'n': row['n_pg'],
-                    'l': row['l']}
-                K_space.append(new_row)
+        # Initialize configuration handler
+        config = ConfigHandler("config.ini")
 
-    elif eigen_tag == 'FirstApprox':
-        # Apply first approximation
-        for row in summary_file:
-            criterium_large = (128 <= row['l'] < 138 and row['n_pg'] >= 13) or (
-                        118 <= row['l'] < 128 and row['n_pg'] >= 12) or (
-                                          108 <= row['l'] < 118 and row['n_pg'] >= 11) or (
-                                          98 <= row['l'] < 107 and row['n_pg'] >= 10) \
-                              or (88 <= row['l'] < 98 and row['n_pg'] >= 9) or (
-                                          79 <= row['l'] < 88 and row['n_pg'] >= 8) or (
-                                          69 <= row['l'] < 79 and row['n_pg'] >= 7) \
-                              or (60 <= row['l'] < 69 and row['n_pg'] >= 6) or (
-                                          51 <= row['l'] < 60 and row['n_pg'] >= 5) or (
-                                          42 <= row['l'] < 51 and row['n_pg'] >= 4) \
-                              or (31 <= row['l'] < 42 and row['n_pg'] >= 3) or (
-                                          20 <= row['l'] < 31 and row['n_pg'] >= 2) or row['l'] <= 19 and row[
-                                  'n_pg'] >= 1
-            #criterium_small = row['l'] < 138
+        # Read path to summary file
+        summary_GYRE_path = config.get("StellarModel", "summary_GYRE_path")
+        DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE', summary_GYRE_path)
+        summary_file = pg.read_output(DATA_DIR)
+        K_space = []
 
-            if abs(row['freq'].real ** 2 - freq_ref ** 2) <= delta_freq_quadrat and row['l'] > 1:
-                if criterium_large:
+        if eigen_tag == None or eigen_tag=='Full':
+            #FULL EIGENSPACE
+            #delta_freq in microHz
+            for row in summary_file:
+                if abs(row['freq'].real**2-freq_ref**2) <= delta_freq_quadrat and row['l'] > 1:   #exclude l>1, since eq. A.19 breaks down for these cases
                     new_row = {
                         'freq': row['freq'],
                         'n': row['n_pg'],
                         'l': row['l']}
                     K_space.append(new_row)
-    elif eigen_tag == 'SelfCoupling':
-        # Only self-coupling (second approximation)
-        for row in summary_file:
-            if abs(row['freq'].real ** 2 - freq_ref ** 2) <= delta_freq_quadrat:
-                if l == row['l'] and n == row['n_pg']:
-                    new_row = {
-                        'freq': row['freq'],
-                        'n': row['n_pg'],
-                        'l': row['l']}
-                    K_space.append(new_row)
-    else:
-        return ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
 
-    return K_space
+        elif eigen_tag == 'FirstApprox':
+            # Apply first approximation
+            for row in summary_file:
+                criterium_large = (128 <= row['l'] < 138 and row['n_pg'] >= 13) or (
+                            118 <= row['l'] < 128 and row['n_pg'] >= 12) or (
+                                              108 <= row['l'] < 118 and row['n_pg'] >= 11) or (
+                                              98 <= row['l'] < 107 and row['n_pg'] >= 10) \
+                                  or (88 <= row['l'] < 98 and row['n_pg'] >= 9) or (
+                                              79 <= row['l'] < 88 and row['n_pg'] >= 8) or (
+                                              69 <= row['l'] < 79 and row['n_pg'] >= 7) \
+                                  or (60 <= row['l'] < 69 and row['n_pg'] >= 6) or (
+                                              51 <= row['l'] < 60 and row['n_pg'] >= 5) or (
+                                              42 <= row['l'] < 51 and row['n_pg'] >= 4) \
+                                  or (31 <= row['l'] < 42 and row['n_pg'] >= 3) or (
+                                              20 <= row['l'] < 31 and row['n_pg'] >= 2) or row['l'] <= 19 and row[
+                                      'n_pg'] >= 1
+                #criterium_small = row['l'] < 138
+
+                if abs(row['freq'].real ** 2 - freq_ref ** 2) <= delta_freq_quadrat and row['l'] > 1:
+                    if criterium_large:
+                        new_row = {
+                            'freq': row['freq'],
+                            'n': row['n_pg'],
+                            'l': row['l']}
+                        K_space.append(new_row)
+
+        elif eigen_tag == 'SelfCoupling':
+            # Only self-coupling (second approximation)
+            for row in summary_file:
+                if abs(row['freq'].real ** 2 - freq_ref ** 2) <= delta_freq_quadrat:
+                    if l == row['l'] and n == row['n_pg']:
+                        new_row = {
+                            'freq': row['freq'],
+                            'n': row['n_pg'],
+                            'l': row['l']}
+                        K_space.append(new_row)
+        else:
+            # Raise an error if the eigen_tag is invalid
+            raise ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
+
+        return K_space
+
+    except ValueError as ve:
+        print(f"Error occurred: {ve}")
+        raise
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        raise
+
 
 def eigenspace_mode_search(l,n, freq_interval):
     #Search quasi-degenerate multiplets with frequencies closer than 0.1 microHz to the reference multiplet
-    #delta_freq in microHz
+
     #doesnt matter here if I calculate the eigenspaces from the frequencies insteat of angular frequencies
     freq_ref = frequencies_GYRE(l,n)
-    name_string="summary_solar_test_suite.h5"
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE')
-    summary_file = pg.read_output(os.path.join(DATA_DIR, name_string))
+
+    # Initialize configuration handler
+    config = ConfigHandler("config.ini")
+
+    # Read path to summary file
+    summary_GYRE_path = config.get("StellarModel", "summary_GYRE_path")
+    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE', summary_GYRE_path)
+    summary_file = pg.read_output(DATA_DIR)
     K_space=[]
 
     for row in summary_file:
@@ -232,18 +259,30 @@ def eigenspace_mode_search(l,n, freq_interval):
 
 
 def supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime, magnetic_field_s, magnetic_field_sprime=None):
-    if magnetic_field_sprime == None:
-        magnetic_field_sprime = magnetic_field_s
+    try:
+        if magnetic_field_sprime == None:
+            magnetic_field_sprime = magnetic_field_s
 
-    gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s,magnetic_field_sprime)
-    normal=normalization(l,n)
-    if l==lprime and n==nprime and m==mprime:
-        delta=1
-    else:
-        delta=0
-    sme=gme/normal*10**12*10**6*radial_kernels.MESA_structural_data()[3]-(omega_ref**2-(2*np.pi*frequencies_GYRE(l,n))**2)*delta  #microHz^2
+        #existence of gme and normal is checked in the functions
+        gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s,magnetic_field_sprime)
+        normal = normalization(l,n)
 
-    return sme, gme, normal
+        #delta function
+        delta = 1 if l == lprime and n == nprime and m == mprime else 0
+
+        #includes conversion factor 10**12*10**6*R_sun to yield microHz^2
+        sme = gme/normal*10**12*10**6*radial_kernels.MESA_structural_data()[3]-(omega_ref**2-(2*np.pi*frequencies_GYRE(l,n))**2)*delta  #microHz^2
+
+        if sme is None:
+            raise ValueError(f"Supermatrix element (SME) is None for inputs: "
+                             f"l={l}, n={n}, m={m}, l'={lprime}, n'={nprime}, m'={mprime}.")
+
+        return sme, gme, normal
+
+    except Exception as e:
+        print(f"An error occurred in 'supermatrix_element': {e}")
+        raise e
+
 
 def supermatrix_parallel_one_row(row,l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None, eigen_tag=None):
     if magnetic_field_sprime == None:
@@ -677,8 +716,9 @@ def main():
     # Initialize configuration handler
     config = ConfigHandler("config.ini")
 
-
-    delta_freq_quadrat = 700  # microHz^2
+    #Eigenspace
+    delta_freq_quadrat = config.getfloat("Eigenspace", "delta_freq_quadrat")  #microHz^2
+    eigen_tag = config.get("Eigenspace", "eigenspace_tag")
 
     # Omega_ref
     l = 2
@@ -697,42 +737,53 @@ def main():
     print('new: ',len(K_space_2approx), K_space_2approx)
 
     #plot_supermatrix(l, n, linthresh,3)
-    #Eigenspace mode search
+
+
     '''
+    #Eigenspace mode search
+    #searches for eigenspaces containing 2 or more modes in the first approximation, eigenspace width is defined either by a frequency interval or delta_freq_quadrat
     n_len2, n_len2_quadrat = 0,0
     n_len3,n_len3_quadrat = 0,0
+    n_len_larger, n_len_larger_quadrat = 0,0
     for l in range(0,150):
         for n in range(0,36):
             try:
                 K_space=eigenspace_mode_search(l,n, 0.1)
-                K_space_quadrat = eigenspace_Criterium_first_approx(l, n, 600)
+                K_space_quadrat = eigenspace(l, n, delta_freq_quadrat, eigen_tag='FirstApprox')
                 if len(K_space)>1:
                     if len(K_space)==2:
                         n_len2+=1
-                        print('K',K_space)
+                        #print('K',K_space)
                     elif len(K_space)==3:
                         n_len3+=1
-                        print('K',K_space)
+                        #print('K',K_space)
                     else:
+                        n_len_larger+=1
                         print('K',K_space)
 
                 if len(K_space_quadrat)>1:
                     if len(K_space_quadrat)==2:
                         n_len2_quadrat+=1
-                        print('K_qua',K_space_quadrat)
+                        #print('K_qua',K_space_quadrat)
                     elif len(K_space_quadrat)==3:
                         n_len3_quadrat+=1
-                        print('K_qua',K_space_quadrat)
+                        #print('K_qua',K_space_quadrat)
                     else:
+                        n_len_larger_quadrat+=1
                         print('K_qua',K_space_quadrat)
 
             except:
                 continue
     print('Eigenspace with length 2: ',n_len2)
     print('Eigenspace with length 3: ',n_len3)
+    print('Eigenspace with length larger 3: ',n_len_larger)
     print('Eigenspace quadrat with length 2: ',n_len2_quadrat)
     print('Eigenspace quadrat with length 3: ',n_len3_quadrat)
+    print('Eigenspace quadrat with length larger 3: ',n_len_larger_quadrat)
     '''
+
+
+
 
     '''
     #TEST KIEFER APPROX
