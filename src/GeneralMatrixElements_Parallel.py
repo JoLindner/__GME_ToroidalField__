@@ -106,25 +106,41 @@ def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime
         if conn:
             conn.close()
 
-
-
-
 def normalization(l,n):
     radius_array = radial_kernels.MESA_structural_data()[0]
-    R_sun = radial_kernels.MESA_structural_data()[3]  # R_sun in cm
-    rho_0=radial_kernels.MESA_structural_data()[2]*R_sun**3 #g/R_sun^3
-    func=rho_0*(radial_kernels.eigenfunctions(l,n,radius_array)[0]**2+l*(l+1)*radial_kernels.eigenfunctions(l,n,radius_array)[1]**2)*radius_array**2
+    r_sun = radial_kernels.MESA_structural_data()[3]  # r_sun in cm
+    rho_0 = radial_kernels.MESA_structural_data()[2]*r_sun**3 #g/R_sun^3
+    func = rho_0*(radial_kernels.eigenfunctions(l,n,radius_array)[0]**2+l*(l+1)*radial_kernels.eigenfunctions(l,n,radius_array)[1]**2)*radius_array**2
     return radial_kernels.radial_integration(radius_array, func)  #g*R_sun^2
 
 def frequencies_GYRE(l,n):
     try:
-        name_string="summary_solar_test_suite.h5"
-        DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE')
-        summary_file = pg.read_output(os.path.join(DATA_DIR, name_string))
+        # Initialize configuration handler
+        config = ConfigHandler("config.ini")
+
+        #Read path to summary file
+        summary_GYRE_path = config.get("StellarModel", "summary_GYRE_path")
+        DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE', summary_GYRE_path)
+        summary_file = pg.read_output(DATA_DIR)
         l_group = summary_file.group_by('l')
         filterd_freq=next(value for value in l_group.groups[l] if value['n_pg']==n)['freq'].real
-    except (FileNotFoundError, KeyError, StopIteration) as e:
-        return None
+
+    except FileNotFoundError as e:
+        error_message = f"File not found: {DATA_DIR}. Please check if the file exists in the 'Data/GYRE' directory."
+        print(error_message)
+        return error_message  # Return error message
+    except KeyError as e:
+        error_message = f"Key error: The expected data for l={l} and n={n} could not be found. Missing key: {e.args[0]}"
+        print(error_message)
+        return error_message  # Return error message
+    except StopIteration:
+        error_message = f"No data found for l={l} and n={n}. Please check the input values."
+        print(error_message)
+        return error_message  # Return error message
+    except Exception as e:
+        error_message = f"An unexpected error occurred: {e}"
+        print(error_message)
+        return error_message  # Return error message
 
     return filterd_freq  #microHz
 
