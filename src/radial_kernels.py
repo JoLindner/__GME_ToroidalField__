@@ -23,46 +23,72 @@ def radial_integration(r, func):
     return integral
 
 def MESA_structural_data(plot_rho_deriv=False):
-    # Initialize configuration handler
-    config = ConfigHandler("config.ini")
+    try:
+        # Initialize configuration handler
+        config = ConfigHandler("config.ini")
 
-    # Load stellar model
-    log_folder = config.get("StellarModel", "mesa_LOGS")
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'Stellar_model')
-    LOGS = mr.MesaLogDir(os.path.join(DATA_DIR, log_folder))
-    his = mr.MesaData(os.path.join(DATA_DIR, log_folder, 'history.data'))
+        # Load stellar model
+        log_folder = config.get("StellarModel", "mesa_LOGS")
+        DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'Stellar_model', log_folder)
 
-    Star_lastprofile = LOGS.profile_data()
-    deriv_lnRho = Star_lastprofile.dlnRho_dr
-    rho_0 = np.power(10, Star_lastprofile.logRho)  #rho_0 at outer boundary of zone in g/cm$^3$
-    radius_array = np.power(10, Star_lastprofile.logR)  #r/R_sun at outer boundary of zone
-    #READ OUT HISTORY VARIABLES
-    R_sun=his.rsun  #cm
+        # Check if LOG folder exists
+        if not os.path.exists(DATA_DIR):
+            raise FileNotFoundError(f"The specified log folder {log_folder} does not exist in {DATA_DIR}. Please verify the path in config.ini.")
+        # Check if history.data exists
+        if not os.path.exists(os.path.join(DATA_DIR, 'history.data')):
+            raise FileNotFoundError(f"history.data file is missing in the folder {log_folder}. Please verify the presence of the file.")
 
+        #Load MESA profiles and history data
+        LOGS = mr.MesaLogDir(DATA_DIR)
+        his = mr.MesaData(os.path.join(DATA_DIR, 'history.data'))
 
-    if plot_rho_deriv==True:
-        plt.figure(figsize=(11,8))
-        plt.plot(radius_array, deriv_lnRho, label='Density gradient', color='red')
-        plt.xlim(radius_array[0]*0.95, radius_array[0]*1.1)
-        #plt.ylim(-50, 400)
-        plt.xlabel('r/R_Sun')
-        plt.ylabel('d/dr ln(rho_0)')
-        plt.title('Density gradient')
-        plt.legend()
-        plt.show()
+        #Load last profile
+        Star_lastprofile = LOGS.profile_data()
 
-        plt.figure(figsize=(11,8))
-        plt.plot(radius_array, rho_0, label='Density', color='red')
-        plt.xlim(0, radius_array[0]*1.1)
-        #plt.ylim(-50, 400)
-        plt.xlabel('r/R_Sun')
-        plt.ylabel('rho$_0$ in g/cm$^3$')
-        plt.title('Density gradient')
-        plt.legend()
-        plt.show()
+        # Ensure the necessary profile data attributes exist
+        if not hasattr(Star_lastprofile, 'dlnRho_dr') or not hasattr(Star_lastprofile, 'logRho') or not hasattr(Star_lastprofile, 'logR') or not hasattr(his, 'rsun'):
+            raise AttributeError("Missing expected attributes in the profile or history data.")
+
+        deriv_lnRho = Star_lastprofile.dlnRho_dr
+        rho_0 = np.power(10, Star_lastprofile.logRho)  #rho_0 at outer boundary of zone in g/cm$^3$
+        radius_array = np.power(10, Star_lastprofile.logR)  #r/R_sun at outer boundary of zone
+        #READ OUT HISTORY VARIABLES
+        R_sun=his.rsun  #cm
 
 
-    return radius_array[::-1], deriv_lnRho[::-1], rho_0[::-1], R_sun    #reversed to start from 0 to R_star
+        if plot_rho_deriv==True:
+            plt.figure(figsize=(11,8))
+            plt.plot(radius_array, deriv_lnRho, label='Density gradient', color='red')
+            plt.xlim(radius_array[0]*0.95, radius_array[0]*1.1)
+            #plt.ylim(-50, 400)
+            plt.xlabel('r/R_Sun')
+            plt.ylabel('d/dr ln(rho_0)')
+            plt.title('Density gradient')
+            plt.legend()
+            plt.show()
+
+            plt.figure(figsize=(11,8))
+            plt.plot(radius_array, rho_0, label='Density', color='red')
+            plt.xlim(0, radius_array[0]*1.1)
+            #plt.ylim(-50, 400)
+            plt.xlabel('r/R_Sun')
+            plt.ylabel('rho$_0$ in g/cm$^3$')
+            plt.title('Density gradient')
+            plt.legend()
+            plt.show()
+
+
+        return radius_array[::-1], deriv_lnRho[::-1], rho_0[::-1], R_sun    #reversed to start from 0 to R_star
+
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        raise
+    except AttributeError as e:
+        print(f"Error: {e}")
+        raise
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        raise
 
 def magnetic_field(magnetic_field,radius_array=np.linspace(0, 1, 5000), plot_a=False ,plot_a_deriv=False, plot_B=False):
     #read in magnetic field model
@@ -183,104 +209,125 @@ def ticks_symmetric(vmin,vmax):
     return ticks_combined
 
 def eigenfunctions(l,n,radius_array=np.linspace(0, 1, 5000),plot_eigenfunction=False,plot_deriv=False, plot_diff=False):
-    name_string="detail.l"+str(l)+".n+"+str(n)+".h5"
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE')
-    eigenfunction = pg.read_output(os.path.join(DATA_DIR, name_string))
+    try:
+        # Initialize configuration handler
+        config = ConfigHandler("config.ini")
 
-    #Cubic spline interpolation
-    xi_r_spline=scipy.interpolate.CubicSpline(eigenfunction['x'], eigenfunction['xi_r'].real)
-    xi_r = lambda x: xi_r_spline(x)
-    xi_h_spline=scipy.interpolate.CubicSpline(eigenfunction['x'], eigenfunction['xi_h'].real)
-    xi_h = lambda x: xi_h_spline(x)
+        # Read paths to detail files
+        detail_path = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE', config.get("StellarModel", "detail_GYRE_path"))
+        name_string = "detail.l"+str(l)+".n+"+str(n)+".h5"
+        DATA_DIR = os.path.join(detail_path, name_string)
 
-    if plot_deriv == True or plot_diff == True:
-        # first derivative
-        h = 0.000001
-        xi_r_deriv1 = (xi_r(eigenfunction['x'] + h) - xi_r(eigenfunction['x'] - h)) / (2 * h)
-        xi_h_deriv1 = (xi_h(eigenfunction['x'] + h) - xi_h(eigenfunction['x'] - h)) / (2 * h)
-        #second derivative
-        xi_r_deriv2 = (xi_r(eigenfunction['x']+2*h)-2*xi_r(eigenfunction['x'])+xi_r(eigenfunction['x']-2*h))/(4*h**2)
-        xi_h_deriv2 = (xi_h(eigenfunction['x']+2*h)-2*xi_h(eigenfunction['x'])+xi_h(eigenfunction['x']-2*h))/(4*h**2)
+        if not os.path.exists(DATA_DIR):
+            raise FileNotFoundError(f"{DATA_DIR} not found. Check the file path and if the detail file for the eigenfunction with l={l}, n={n} exists.")
 
-    if plot_eigenfunction == True:
+        eigenfunction = pg.read_output(DATA_DIR)
+        if eigenfunction is None:
+            raise ValueError(f"Unable to read eigenfunction data from {DATA_DIR}.")
 
-        fig, ax = plt.subplots(1, 2, figsize=(11, 8))
-        ax[0].scatter(eigenfunction['x'], eigenfunction['xi_r'].real, label='xi_r/R', color='red', s=0.05)
-        ax[1].scatter(eigenfunction['x'], eigenfunction['xi_h'].real, label='xi_h/R', color='blue', s=0.05)
-        ax[0].set_xlabel('r/R_Sun')
-        ax[0].set_ylabel('xi_r/R_Sun')
-        ax[1].set_xlabel('r/R_Sun')
-        ax[1].set_ylabel('xi_h/R_Sun')
-        ax[0].set_title('radial displacement for n=+' + str(n) + ", l=" + str(l))
-        ax[1].set_title('horizontal displacement for n=+' + str(n) + ", l=" + str(l))
+        #Cubic spline interpolation
+        xi_r_spline=scipy.interpolate.CubicSpline(eigenfunction['x'], eigenfunction['xi_r'].real)
+        xi_r = lambda x: xi_r_spline(x)
+        xi_h_spline=scipy.interpolate.CubicSpline(eigenfunction['x'], eigenfunction['xi_h'].real)
+        xi_h = lambda x: xi_h_spline(x)
 
-        for j in range(2):
-            ax[j].legend(loc='best')
-        plt.tight_layout()
-        plt.show()
-        # plt.savefig('Bilder/Eigenfunctions_n4.png')
+        if plot_deriv == True or plot_diff == True:
+            # first derivative
+            h = 0.000001
+            xi_r_deriv1 = (xi_r(eigenfunction['x'] + h) - xi_r(eigenfunction['x'] - h)) / (2 * h)
+            xi_h_deriv1 = (xi_h(eigenfunction['x'] + h) - xi_h(eigenfunction['x'] - h)) / (2 * h)
+            #second derivative
+            xi_r_deriv2 = (xi_r(eigenfunction['x']+2*h)-2*xi_r(eigenfunction['x'])+xi_r(eigenfunction['x']-2*h))/(4*h**2)
+            xi_h_deriv2 = (xi_h(eigenfunction['x']+2*h)-2*xi_h(eigenfunction['x'])+xi_h(eigenfunction['x']-2*h))/(4*h**2)
 
-    if plot_deriv == True:
-        x_array = np.linspace(0, np.max(eigenfunction['x']), num=10000)
-        fig, ax = plt.subplots(3, 2, figsize=(10, 14))
-        ax[0][0].plot(x_array, xi_r_spline(x_array), label='CubicSpline radial displacement')
-        ax[0][0].scatter(eigenfunction['x'], eigenfunction['xi_r'].real, label='GYRE_data xi_r', s=0.05, color='red')
-        ax[0][1].plot(x_array, xi_h_spline(x_array), label='CubicSpline horizontal displacement')
-        ax[0][1].scatter(eigenfunction['x'], eigenfunction['xi_h'].real, label='GYRE_data xi_h', s=0.05, color='red')
-        ax[0][0].set_title('radial displacement for n=+' + str(n) + ", l=" + str(l))
-        ax[0][1].set_title('horizontal displacement for n=+' + str(n) + ", l=" + str(l))
-        # ax[0].set_xlim(0.98, 1.005)
-        ax[1][0].plot(x_array, xi_r_spline(x_array, nu=1), '--', label='1st deriv xi_r')
-        ax[1][0].plot(eigenfunction['x'], xi_r_deriv1, ':', label='1st deriv calc xi_r')
-        ax[1][0].set_xlim(0.98, 1.005)
-        ax[2][0].plot(x_array, xi_r_spline(x_array, nu=2), '--', label='2nd deriv xi_r')
-        ax[2][0].plot(eigenfunction['x'], xi_r_deriv2, ':', label='2nd deriv calc xi_r')
-        ax[2][0].set_xlim(0.994, 1.005)
-        ax[1][1].plot(x_array, xi_h_spline(x_array, nu=1), '--', label='1st deriv xi_h')
-        ax[1][1].plot(eigenfunction['x'], xi_h_deriv1, ':', label='1st deriv calc xi_h')
-        ax[1][1].set_xlim(0.98, 1.005)
-        ax[2][1].plot(x_array, xi_h_spline(x_array, nu=2), '--', label='2nd deriv xi_h')
-        ax[2][1].plot(eigenfunction['x'], xi_h_deriv2, ':', label='2nd deriv calc xi_h')
-        ax[2][1].set_xlim(0.994, 1.005)
+        if plot_eigenfunction == True:
 
-        for j in range(3):
-            for i in range(2):
-                ax[j][i].legend(loc='upper left')
-                ax[j][i].set_xlabel('r/R_sun')
-        plt.tight_layout()
-        plt.show()
+            fig, ax = plt.subplots(1, 2, figsize=(11, 8))
+            ax[0].scatter(eigenfunction['x'], eigenfunction['xi_r'].real, label='xi_r/R', color='red', s=0.05)
+            ax[1].scatter(eigenfunction['x'], eigenfunction['xi_h'].real, label='xi_h/R', color='blue', s=0.05)
+            ax[0].set_xlabel('r/R_Sun')
+            ax[0].set_ylabel('xi_r/R_Sun')
+            ax[1].set_xlabel('r/R_Sun')
+            ax[1].set_ylabel('xi_h/R_Sun')
+            ax[0].set_title('radial displacement for n=+' + str(n) + ", l=" + str(l))
+            ax[1].set_title('horizontal displacement for n=+' + str(n) + ", l=" + str(l))
 
-    if plot_diff == True:
-        diff_spline_r = abs(eigenfunction['xi_r'].real - xi_r_spline(eigenfunction['x']))
-        diff_spline_h = abs(eigenfunction['xi_h'].real - xi_h_spline(eigenfunction['x']))
-        diff_deriv1_r = abs(xi_r_deriv1 - xi_r_spline(eigenfunction['x'], nu=1))
-        diff_deriv1_h = abs(xi_h_deriv1 - xi_h_spline(eigenfunction['x'], nu=1))
-        diff_deriv2_r = abs(xi_r_deriv2 - xi_r_spline(eigenfunction['x'], nu=2))
-        diff_deriv2_h = abs(xi_h_deriv2 - xi_h_spline(eigenfunction['x'], nu=2))
+            for j in range(2):
+                ax[j].legend(loc='best')
+            plt.tight_layout()
+            plt.show()
+            # plt.savefig('Bilder/Eigenfunctions_n4.png')
 
-        fig, ax = plt.subplots(3, 2, figsize=(10, 14))
-        ax[0][0].plot(eigenfunction['x'], diff_spline_r, label='Diff Spline and radial displacement')
-        ax[0][1].plot(eigenfunction['x'], diff_spline_h, label='Diff Spline and horizontal displacement')
-        ax[0][0].set_title('radial displacement for n=+' + str(n) + ", l=" + str(l))
-        ax[0][1].set_title('horizontal displacement for n=+' + str(n) + ", l=" + str(l))
-        # ax[0].set_xlim(0.98, 1.005)
-        ax[1][0].plot(eigenfunction['x'], diff_deriv1_r, ':', label='Diff 1st deriv xi_r')
-        # ax[1][0].set_xlim(0.98, 1.005)
-        ax[1][1].plot(eigenfunction['x'], diff_deriv1_h, ':', label='Diff 1st deriv xi_h')
-        # ax[2][0].set_xlim(0.994, 1.005)
-        ax[2][0].plot(eigenfunction['x'], diff_deriv2_r, ':', label='Diff 2nd deriv  xi_r')
-        # ax[1][1].set_xlim(0.98, 1.005)
-        ax[2][1].plot(eigenfunction['x'], diff_deriv2_h, ':', label='Diff 2nd deriv xi_h')
-        # ax[2][1].set_xlim(0.994, 1.005)
+        if plot_deriv == True:
+            x_array = np.linspace(0, np.max(eigenfunction['x']), num=10000)
+            fig, ax = plt.subplots(3, 2, figsize=(10, 14))
+            ax[0][0].plot(x_array, xi_r_spline(x_array), label='CubicSpline radial displacement')
+            ax[0][0].scatter(eigenfunction['x'], eigenfunction['xi_r'].real, label='GYRE_data xi_r', s=0.05, color='red')
+            ax[0][1].plot(x_array, xi_h_spline(x_array), label='CubicSpline horizontal displacement')
+            ax[0][1].scatter(eigenfunction['x'], eigenfunction['xi_h'].real, label='GYRE_data xi_h', s=0.05, color='red')
+            ax[0][0].set_title('radial displacement for n=+' + str(n) + ", l=" + str(l))
+            ax[0][1].set_title('horizontal displacement for n=+' + str(n) + ", l=" + str(l))
+            # ax[0].set_xlim(0.98, 1.005)
+            ax[1][0].plot(x_array, xi_r_spline(x_array, nu=1), '--', label='1st deriv xi_r')
+            ax[1][0].plot(eigenfunction['x'], xi_r_deriv1, ':', label='1st deriv calc xi_r')
+            ax[1][0].set_xlim(0.98, 1.005)
+            ax[2][0].plot(x_array, xi_r_spline(x_array, nu=2), '--', label='2nd deriv xi_r')
+            ax[2][0].plot(eigenfunction['x'], xi_r_deriv2, ':', label='2nd deriv calc xi_r')
+            ax[2][0].set_xlim(0.994, 1.005)
+            ax[1][1].plot(x_array, xi_h_spline(x_array, nu=1), '--', label='1st deriv xi_h')
+            ax[1][1].plot(eigenfunction['x'], xi_h_deriv1, ':', label='1st deriv calc xi_h')
+            ax[1][1].set_xlim(0.98, 1.005)
+            ax[2][1].plot(x_array, xi_h_spline(x_array, nu=2), '--', label='2nd deriv xi_h')
+            ax[2][1].plot(eigenfunction['x'], xi_h_deriv2, ':', label='2nd deriv calc xi_h')
+            ax[2][1].set_xlim(0.994, 1.005)
 
-        for j in range(3):
-            for i in range(2):
-               ax[j][i].legend(loc='upper left')
-               ax[j][i].set_xlabel('r/R_sun')
-        plt.tight_layout()
-        plt.show()
+            for j in range(3):
+                for i in range(2):
+                    ax[j][i].legend(loc='upper left')
+                    ax[j][i].set_xlabel('r/R_sun')
+            plt.tight_layout()
+            plt.show()
 
-    return xi_r(radius_array), xi_h(radius_array), xi_r_spline(radius_array, nu=1), xi_h_spline(radius_array,nu=1), xi_r_spline(radius_array, nu=2), xi_h_spline(radius_array, nu=2)
+        if plot_diff == True:
+            diff_spline_r = abs(eigenfunction['xi_r'].real - xi_r_spline(eigenfunction['x']))
+            diff_spline_h = abs(eigenfunction['xi_h'].real - xi_h_spline(eigenfunction['x']))
+            diff_deriv1_r = abs(xi_r_deriv1 - xi_r_spline(eigenfunction['x'], nu=1))
+            diff_deriv1_h = abs(xi_h_deriv1 - xi_h_spline(eigenfunction['x'], nu=1))
+            diff_deriv2_r = abs(xi_r_deriv2 - xi_r_spline(eigenfunction['x'], nu=2))
+            diff_deriv2_h = abs(xi_h_deriv2 - xi_h_spline(eigenfunction['x'], nu=2))
+
+            fig, ax = plt.subplots(3, 2, figsize=(10, 14))
+            ax[0][0].plot(eigenfunction['x'], diff_spline_r, label='Diff Spline and radial displacement')
+            ax[0][1].plot(eigenfunction['x'], diff_spline_h, label='Diff Spline and horizontal displacement')
+            ax[0][0].set_title('radial displacement for n=+' + str(n) + ", l=" + str(l))
+            ax[0][1].set_title('horizontal displacement for n=+' + str(n) + ", l=" + str(l))
+            # ax[0].set_xlim(0.98, 1.005)
+            ax[1][0].plot(eigenfunction['x'], diff_deriv1_r, ':', label='Diff 1st deriv xi_r')
+            # ax[1][0].set_xlim(0.98, 1.005)
+            ax[1][1].plot(eigenfunction['x'], diff_deriv1_h, ':', label='Diff 1st deriv xi_h')
+            # ax[2][0].set_xlim(0.994, 1.005)
+            ax[2][0].plot(eigenfunction['x'], diff_deriv2_r, ':', label='Diff 2nd deriv  xi_r')
+            # ax[1][1].set_xlim(0.98, 1.005)
+            ax[2][1].plot(eigenfunction['x'], diff_deriv2_h, ':', label='Diff 2nd deriv xi_h')
+            # ax[2][1].set_xlim(0.994, 1.005)
+
+            for j in range(3):
+                for i in range(2):
+                   ax[j][i].legend(loc='upper left')
+                   ax[j][i].set_xlabel('r/R_sun')
+            plt.tight_layout()
+            plt.show()
+
+        return xi_r(radius_array), xi_h(radius_array), xi_r_spline(radius_array, nu=1), xi_h_spline(radius_array,nu=1), xi_r_spline(radius_array, nu=2), xi_h_spline(radius_array, nu=2)
+
+    except FileNotFoundError as e:
+        print(f"File error: {e}")
+        raise
+
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        raise
+
 
 #Radial Kernels
 def R1(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
@@ -665,7 +712,7 @@ def main():
     magnetic_field_s = MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s)
 
     #extract radius_array from MESA_structural_data
-    radius_array=MESA_structural_data(False)[0]
+    radius_array=MESA_structural_data(True)[0]
 
     magnetic_field(magnetic_field_s, radius_array, False, False, False)
 
