@@ -439,7 +439,6 @@ def save_index_map_to_file(index_map, l, n, eigentag=None):
 
 def load_index_map_from_file(filename):
     try:
-        # Here only used for creating supermatrix plots
         # Read lines from the file
         with open(filename, 'r') as f:
             lines = f.readlines()

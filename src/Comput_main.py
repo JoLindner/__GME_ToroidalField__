@@ -2,97 +2,113 @@ import numpy as np
 import os
 import GeneralMatrixElements_Parallel as GMEP
 import Frequency_shift as fs
-import Frequency_shift_first_approx as fs_1a
-import Frequency_shift_second_approx as fs_2a
 import radial_kernels
 import time
+from config import ConfigHandler
 
-def calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None):
-    if magnetic_field_sprime == None:
-        magnetic_field_sprime = magnetic_field_s
+def calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None, eigentag=None):
+    try:
+        start_time = time.time()
 
-    start_time = time.time()
-    #Create and Save index map
-    index_map = GMEP.create_index_map(l,n,GMEP.eigenspace(l,n,delta_freq_quadrat))
-    GMEP.save_index_map_to_file(index_map, l,n)
+        if magnetic_field_sprime is None:
+            magnetic_field_sprime = magnetic_field_s
 
-    #Calculate and save supermatrix
-    #ALL GME involved are safed as well for later use
-    sme = GMEP.supermatrix_parallel(l, n, delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime)
-    name_string=f'supermatrix_array_{l}_{n}.txt'
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', 'Supermatrices', name_string)
-    np.savetxt(DATA_DIR, sme, delimiter=' ')
-    print(f'Supermatrix saved to {DATA_DIR}')
-    #Calculate and save frequency shifts for (l,n)-modes
-    f_shifts=fs.calculate_safe_extract_freq_shifts(l,n)
-    print(f'Results of Frequency shifts for l={l} n={n} multiplet:')
-    print(f_shifts)
-    end_time = time.time()
-    print("Elapsed time:", end_time - start_time, "seconds")
-    print('Finished.\n\n\n')
+        #Create and Save index map
+        index_map = GMEP.create_index_map(l,n,GMEP.eigenspace(l,n,delta_freq_quadrat, eigentag))
+        GMEP.save_index_map_to_file(index_map, l, n, eigentag)
 
-def calculate_freq_shift_quasi_degenerate_first_approx(l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None):
-    if magnetic_field_sprime == None:
-        magnetic_field_sprime = magnetic_field_s
+        #Calculate and save supermatrix
+        #ALL GME involved are safed in database for later use
+        sme = GMEP.supermatrix_parallel(l, n, delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime, eigentag)
+        if eigentag is None or eigentag == 'Full':
+            name_string = f'supermatrix_array_{l}_{n}_full.txt'
+        elif eigentag == 'FirstApprox':
+            name_string = f'supermatrix_array_{l}_{n}_first_approx.txt'
+        elif eigentag == 'SelfCoupling':
+            name_string = f'supermatrix_array_{l}_{n}_self_coupling.txt'
+        else:
+            # Raise an error if the eigen_tag is invalid
+            raise ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
+        DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', ConfigHandler().get('ModelConfig', 'model_name'), 'Supermatrices', name_string)
+        np.savetxt(DATA_DIR, sme, delimiter=' ')
+        print(f'Supermatrix of l={l} n={n} multiplet with {eigentag} eigenspace saved to {DATA_DIR}')
 
-    start_time = time.time()
-    #Create and Save index map
-    index_map = GMEP.create_index_map(l,n,GMEP.eigenspace(l,n,delta_freq_quadrat, eigen_tag='FirstApprox'))
-    fs_1a.save_index_map_to_file(index_map, l,n)
+        #Calculate and save frequency shifts for (l,n)-modes
+        f_shifts=fs.calculate_safe_extract_freq_shifts(l,n,eigentag)
+        print(f'Results of Frequency shifts for l={l} n={n} multiplet:')
+        print(f_shifts)
 
-    #Calculate and save supermatrix
-    #ALL GME involved are safed as well for later use
-    sme = GMEP.supermatrix_parallel(l, n, delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime, eigen_tag='FirstApprox')
-    name_string=f'supermatrix_array_{l}_{n}_first_approx.txt'
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', 'Supermatrices', name_string)
-    np.savetxt(DATA_DIR, sme, delimiter=' ')
-    print(f'Supermatrix approximation saved to {DATA_DIR}')
-    #Calculate and save frequency shifts for (l,n)-modes
-    f_shifts=fs_1a.calculate_safe_extract_freq_shifts(l,n)
-    print(f'Results of Frequency shifts for l={l} n={n} multiplet in first approximation:')
-    print(f_shifts)
-    end_time = time.time()
-    print("Elapsed time:", end_time - start_time, "seconds")
-    print('Finished.\n\n\n')
+        end_time = time.time()
+        print("Elapsed time:", end_time - start_time, "seconds")
+        print('Finished.\n\n\n')
+
+    except (FileNotFoundError, ValueError, IOError) as e:
+        print(f"Error during combining the results: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred in calculate_freq_shift_quasi_degenerate: {e}")
 
 
-def calculate_freq_shift_quasi_degenerate_second_approx(l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None):
-    if magnetic_field_sprime == None:
-        magnetic_field_sprime = magnetic_field_s
-
-    start_time = time.time()
-    #Create and Save index map
-    index_map = GMEP.create_index_map(l,n,GMEP.eigenspace(l,n,delta_freq_quadrat, eigen_tag='SelfCoupling'))
-    fs_2a.save_index_map_to_file(index_map, l,n)
-
-    #Calculate and save supermatrix
-    #ALL GME involved are safed as well for later use
-    sme = GMEP.supermatrix_parallel(l, n, delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime, eigen_tag='SelfCoupling')
-    name_string=f'supermatrix_array_{l}_{n}_second_approx.txt'
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', 'Supermatrices', name_string)
-    np.savetxt(DATA_DIR, sme, delimiter=' ')
-    print(f'Supermatrix approximation saved to {DATA_DIR}')
-    #Calculate and save frequency shifts for (l,n)-modes
-    f_shifts=fs_2a.calculate_safe_extract_freq_shifts(l,n)
-    print(f'Results of Frequency shifts for l={l} n={n} multiplet in second approximation:')
-    print(f_shifts)
-    end_time = time.time()
-    print("Elapsed time:", end_time - start_time, "seconds")
-    print('Finished.\n\n\n')
 
 def main():
-    #initialize magnetic field
-    #The programm is designed to handle only one Model of the magnetic fields at once.
-    #If the Model is changed, clean the Output folders and re-run.
-    magnetic_field_modelA = radial_kernels.MagneticField(B_max=300, mu=0.713, sigma=0.05, s=2)
+    # Initialize configuration handler
+    # Use NEW model_name for ALL parameter changes (except eigenspace_tag and [Range] settings)
+    config = ConfigHandler("config.ini")
 
-    #delta_freq^2 = 700 microHz^2
-    delta_freq_quadrat = 700  #microHz^2
+    #Load Model name
+    model_name = config.get("ModelConfig", "model_name")
+
+    #Create Directories
+    output_dir = os.path.join(os.path.dirname(__file__), 'Output')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Created directory: {output_dir}")
+    model_output_dir = os.path.join(output_dir, model_name)
+    if not os.path.exists(model_output_dir):
+        os.makedirs(model_output_dir)
+        print(f"Created directory: {model_output_dir}")
+    gme_dir = os.path.join(model_output_dir, 'GeneralMatrixElements')
+    if not os.path.exists(gme_dir):
+        os.makedirs(gme_dir)
+        print(f"Created directory: {gme_dir}")
+    sm_dir = os.path.join(model_output_dir, 'Supermatrices')
+    if not os.path.exists(sm_dir):
+        os.makedirs(sm_dir)
+        print(f"Created directory: {sm_dir}")
+    index_map_dir = os.path.join(sm_dir, 'IndexMaps')
+    if not os.path.exists(index_map_dir):
+        os.makedirs(index_map_dir)
+        print(f"Created directory: {index_map_dir}")
+    frequency_shifts_dir = os.path.join(model_output_dir, 'FrequencyShifts')
+    if not os.path.exists(frequency_shifts_dir):
+        os.makedirs(frequency_shifts_dir)
+        print(f"Created directory: {frequency_shifts_dir}")
 
 
-    #Over all l,n in parameterspace of FirstApprox (excludes multiplets which do not penetrate into effective range of magnetic field
-    for l in range(2,140+1):
-        for n in range(0, 35+1):
+    # Load the magnetic field parameters
+    B_max = config.getfloat("MagneticFieldModel", "B_max")
+    mu = config.getfloat("MagneticFieldModel", "mu")
+    sigma = config.getfloat("MagneticFieldModel", "sigma")
+    s = config.getfloat("MagneticFieldModel", "s")
+
+    # Initialize the magnetic field model
+    magnetic_field_s = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s)
+
+
+    #eigenspace width and eigentag
+    delta_freq_quadrat = config.getfloat("Eigenspace", "delta_freq_quadrat")  #microHz^2
+    eigentag = config.get("Eigenspace", "eigenspace_tag")
+
+    # Load the range for l and n
+    l_min = config.getint("Range", "l_min")
+    l_max = config.getint("Range", "l_max")
+    n_min = config.getint("Range", "n_min")
+    n_max = config.getint("Range", "n_max")
+
+
+    # Compute frequency shifts for all multiplets in l, n parameterspace defined in [Range] given a specific eigenspace tag (Full, FirstApprox or SelfCoupling)
+    for l in range(l_min, l_max+1):
+        for n in range(n_min, n_max+1):
+            # Excludes multiplets which do not penetrate into effective magnetic field range
             criterium_large = (128 <= l < 138 and n >= 13) or (
                     118 <= l < 128 and n >= 12) or (
                                       108 <= l < 118 and n >= 11) or (
@@ -106,9 +122,9 @@ def main():
                               or (31 <= l < 42 and n >= 3) or (
                                       20 <= l < 31 and n >= 2) or l <= 19 and n >= 1
             if GMEP.frequencies_GYRE(l,n) is not None and criterium_large:
-                print(f'Computing multiplet l={l}, n={n}, freq={GMEP.frequencies_GYRE(l,n)} microHz')
-                #Calculate using First approximation
-                calculate_freq_shift_quasi_degenerate_first_approx(l,n,delta_freq_quadrat, magnetic_field_modelA)
+                print(f'Computing multiplet l={l}, n={n}, freq={GMEP.frequencies_GYRE(l,n)} microHz with eigenspace tag {eigentag}')
+                calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat, magnetic_field_s, eigentag=eigentag)
+
     print(f'All multiplets finished.')
 
 
@@ -119,34 +135,7 @@ def main():
 
     for value in n:
         print(f'Computing l={l}, n={value}, freq={GMEP.frequencies_GYRE(l,value)} microHz')
-        calculate_freq_shift_quasi_degenerate_second_approx(l,value,delta_freq_quadrat, magnetic_field_modelA)
-    '''
-
-    '''
-    #Potential follow up multiplets
-    l = 25
-    n = [0,6,13]
-    for value in n:
-        print(f'Computing l={l}, n={value}, freq={GMEP.frequencies_GYRE(l,value)} microHz')
-        calculate_freq_shift_quasi_degenerate(l,value,delta_freq_quadrat, magnetic_field_modelA)
-
-    l = 50
-    n = [0,5,9]
-    for value in n:
-        print(f'Computing l={l}, n={value}, freq={GMEP.frequencies_GYRE(l,value)} microHz')
-        calculate_freq_shift_quasi_degenerate(l,value,delta_freq_quadrat, magnetic_field_modelA)
-
-    l = 100
-    n = [0,3,6]
-    for value in n:
-        print(f'Computing l={l}, n={value}, freq={GMEP.frequencies_GYRE(l,value)} microHz')
-        calculate_freq_shift_quasi_degenerate(l,value,delta_freq_quadrat, magnetic_field_modelA)
-
-    l = 150
-    n = [0,4]
-    for value in n:
-        print(f'Computing l={l}, n={value}, freq={GMEP.frequencies_GYRE(l,value)} microHz')
-        calculate_freq_shift_quasi_degenerate(l,value,delta_freq_quadrat, magnetic_field_modelA)
+        calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat, magnetic_field_s, eigentag=eigentag)
     '''
 
 if __name__== '__main__':
