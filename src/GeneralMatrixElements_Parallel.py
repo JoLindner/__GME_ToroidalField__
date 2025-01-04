@@ -45,7 +45,7 @@ def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime
             return result_row[0]
 
         #Magnetic fields
-        if magnetic_field_sprime == None:
+        if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
         s = magnetic_field_s.s
         sprime = magnetic_field_sprime.s
@@ -158,7 +158,7 @@ def eigenspace(l,n, delta_freq_quadrat, eigen_tag=None):
         summary_file = pg.read_output(DATA_DIR)
         K_space = []
 
-        if eigen_tag == None or eigen_tag=='Full':
+        if eigen_tag is None or eigen_tag=='Full':
             #FULL EIGENSPACE
             #delta_freq in microHz
             for row in summary_file:
@@ -252,7 +252,7 @@ def eigenspace_mode_search(l,n, freq_interval):
 
 def supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime, magnetic_field_s, magnetic_field_sprime=None, model_name=None):
     try:
-        if magnetic_field_sprime == None:
+        if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
 
         #existence of gme and normal is checked in the functions
@@ -278,7 +278,7 @@ def supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime, magnetic_field_s, 
 
 def supermatrix_parallel_one_row(row,l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None, eigen_tag=None, model_name=None):
     try:
-        if magnetic_field_sprime == None:
+        if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
         kprime = row[0]
         mprime = row[1]
@@ -328,7 +328,7 @@ def supermatrix_parallel(l,n, delta_freq_quadrat, magnetic_field_s, magnetic_fie
         raise ValueError("The 'model_name' could not be fetched from the config.ini file under [ModelConfig] section.")
 
     try:
-        if magnetic_field_sprime == None:
+        if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
 
         #generate eigenspace
@@ -414,7 +414,7 @@ def save_index_map_to_file(index_map, l, n, eigentag=None):
             raise ValueError("The 'model_name' could not be fetched from the config.ini file under [ModelConfig] section.")
 
 
-        if eigentag == None or eigentag=='Full':
+        if eigentag is None or eigentag == 'Full':
             name_string = f'index_map_supermatrix_array_{l}_{n}_full.txt'
         elif eigentag == 'FirstApprox':
             name_string = f'index_map_supermatrix_array_{l}_{n}_first_approx.txt'
@@ -764,6 +764,8 @@ def plot_supermatrix_l5_n12(l, n, linthresh, trunc=None):
 
 #TEST AREA
 def main():
+    #start_time = time.time()
+
     # Initialize configuration handler
     config = ConfigHandler("config.ini")
 
@@ -787,6 +789,9 @@ def main():
     K_space_2approx = eigenspace(l, n, delta_freq_quadrat, 'SelfCoupling')
     print('new: ',len(K_space_2approx), K_space_2approx)
 
+    #end_time = time.time()
+    #elapsed_time = end_time - start_time
+    #print(elapsed_time)
     #plot_supermatrix(l, n, linthresh,3)
 
 
