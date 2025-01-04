@@ -12,22 +12,14 @@ from config import ConfigHandler
 import duckdb
 
 
-def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime=None):
-    # Initialize configuration handler
-    config = ConfigHandler("config.ini")
-    #Load Model name
-    model_name = config.get("ModelConfig", "model_name")
-    if not model_name:
-        raise ValueError("The 'model_name' could not be fetched from the config.ini file under [ModelConfig] section.")
-
+def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime=None, model_name=None):
     #Output directory initialization
     db_name_string = f'gme_results_{model_name}.db'
-    output_dir = os.path.join(os.path.dirname(__file__), 'Output')
-    model_output_dir = os.path.join(output_dir, model_name)
-    os.makedirs(model_output_dir, exist_ok=True)
-    gme_dir = os.path.join(model_output_dir, 'GeneralMatrixElements')
-    os.makedirs(gme_dir, exist_ok=True)
-    DATA_DIR = os.path.join(gme_dir, db_name_string)
+    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', model_name, 'GeneralMatrixElements', db_name_string)
+
+    # Check if the database file already exists
+    if not os.path.exists(DATA_DIR):
+        print(f"Creating new database: {db_name_string}")
 
     try:
         conn = duckdb.connect(database=DATA_DIR)
@@ -125,7 +117,7 @@ def normalization(l,n):
 def frequencies_GYRE(l,n):
     try:
         # Initialize configuration handler
-        config = ConfigHandler("config.ini")
+        config = ConfigHandler()
 
         #Read path to summary file
         summary_GYRE_path = config.get("StellarModel", "summary_GYRE_path")
@@ -158,7 +150,7 @@ def eigenspace(l,n, delta_freq_quadrat, eigen_tag=None):
         freq_ref = frequencies_GYRE(l, n)
 
         # Initialize configuration handler
-        config = ConfigHandler("config.ini")
+        config = ConfigHandler()
 
         # Read path to summary file
         summary_GYRE_path = config.get("StellarModel", "summary_GYRE_path")
@@ -220,10 +212,10 @@ def eigenspace(l,n, delta_freq_quadrat, eigen_tag=None):
         return K_space
 
     except ValueError as ve:
-        print(f"Error occurred: {ve}")
+        print(f"Error occurred in eigenspace creation: {ve}")
         raise
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        print(f"An unexpected error occurred in the creation of the eigenspace: {e}")
         raise
 
 
@@ -234,7 +226,7 @@ def eigenspace_mode_search(l,n, freq_interval):
     freq_ref = frequencies_GYRE(l,n)
 
     # Initialize configuration handler
-    config = ConfigHandler("config.ini")
+    config = ConfigHandler()
 
     # Read path to summary file
     summary_GYRE_path = config.get("StellarModel", "summary_GYRE_path")
@@ -258,13 +250,13 @@ def eigenspace_mode_search(l,n, freq_interval):
     return K_space
 
 
-def supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime, magnetic_field_s, magnetic_field_sprime=None):
+def supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime, magnetic_field_s, magnetic_field_sprime=None, model_name=None):
     try:
         if magnetic_field_sprime == None:
             magnetic_field_sprime = magnetic_field_s
 
         #existence of gme and normal is checked in the functions
-        gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s,magnetic_field_sprime)
+        gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s,magnetic_field_sprime,model_name)
         normal = normalization(l,n)
 
         #delta function
@@ -280,145 +272,204 @@ def supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime, magnetic_field_s, 
         return sme, gme, normal
 
     except Exception as e:
-        print(f"An error occurred in 'supermatrix_element': {e}")
+        print(f"An error occurred in computing the 'supermatrix_element': {e}")
         raise e
 
 
-def supermatrix_parallel_one_row(row,l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None, eigen_tag=None):
-    if magnetic_field_sprime == None:
-        magnetic_field_sprime = magnetic_field_s
-    kprime = row[0]
-    mprime = row[1]
-    omega_ref = 2*np.pi*frequencies_GYRE(l,n)
-    K_space = eigenspace(l,n, delta_freq_quadrat, eigen_tag)
+def supermatrix_parallel_one_row(row,l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None, eigen_tag=None, model_name=None):
+    try:
+        if magnetic_field_sprime == None:
+            magnetic_field_sprime = magnetic_field_s
+        kprime = row[0]
+        mprime = row[1]
+        omega_ref = 2*np.pi*frequencies_GYRE(l,n)
+        K_space = eigenspace(l,n, delta_freq_quadrat, eigen_tag)
 
-    size=0
-    for i in range(0,len(K_space)):
-        for iprime in range(0, len(K_space)):
-            size=size+(2*K_space[i]['l']+1)*(2*K_space[iprime]['l']+1)
-    if np.sqrt(size) %1 ==0:
-        matrix_size=int(np.sqrt(size))
-    else:
-        return ValueError('Matrixsize not an integer')
-    #print(size,matrix_size)
-    supermatrix_array_row = np.empty((matrix_size), dtype=np.float64)
+        size=0
+        for i in range(0,len(K_space)):
+            for iprime in range(0, len(K_space)):
+                size=size+(2*K_space[i]['l']+1)*(2*K_space[iprime]['l']+1)
+        if np.sqrt(size) %1 ==0:
+            matrix_size=int(np.sqrt(size))
+        else:
+            raise ValueError('Matrixsize not an integer')
 
-    # fill supermatrix
-    lprime = int(K_space[kprime]['l'])
-    nprime = int(K_space[kprime]['n'])
-    mprime_index = mprime
-    mprime = mprime_index-lprime
-    col = 0
-    for k in range(0, len(K_space)):
-        l = int(K_space[k]['l'])
-        n = int(K_space[k]['n'])
-        for m in range(0,2*l+1):
-            m_index = m
-            m = m_index-l
-            #Z_k',k
-            sme = supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime)[0]
-            supermatrix_array_row[col] = sme
-            col += 1
-    return np.transpose(supermatrix_array_row)
+        supermatrix_array_row = np.empty((matrix_size), dtype=np.float64)
+
+        # fill supermatrix
+        lprime = int(K_space[kprime]['l'])
+        nprime = int(K_space[kprime]['n'])
+        mprime_index = mprime
+        mprime = mprime_index-lprime
+        col = 0
+        for k in range(0, len(K_space)):
+            l = int(K_space[k]['l'])
+            n = int(K_space[k]['n'])
+            for m in range(0,2*l+1):
+                m_index = m
+                m = m_index-l
+                #Z_k',k
+                sme = supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime, model_name)[0]
+                supermatrix_array_row[col] = sme
+                col += 1
+        return np.transpose(supermatrix_array_row)
+
+    except Exception as e:
+        print(f"An error occurred in computing a row of the supermatrix: {e}")
+        raise e
 
 def supermatrix_parallel(l,n, delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime=None, eigen_tag=None):
-    if magnetic_field_sprime == None:
-        magnetic_field_sprime = magnetic_field_s
+    # Initialize configuration handler
+    config = ConfigHandler()
+    #Load Model name
+    model_name = config.get("ModelConfig", "model_name")
+    #Check if Model name exists
+    if not model_name:
+        raise ValueError("The 'model_name' could not be fetched from the config.ini file under [ModelConfig] section.")
 
-    K_space=eigenspace(l,n,delta_freq_quadrat, eigen_tag)
+    try:
+        if magnetic_field_sprime == None:
+            magnetic_field_sprime = magnetic_field_s
 
-    rows=[]
-    for kprime in range(0, len(K_space)):
-        l_aux = K_space[kprime]['l']
-        for mprime in range(0, 2*l_aux+1):
-            rows.append([kprime,mprime])
+        #generate eigenspace
+        K_space = eigenspace(l,n,delta_freq_quadrat, eigen_tag)
 
-    num_workers = os.cpu_count()  # Get the number of CPU cores   #Umgebungsvariable SLURM_CPUS_PER_TASK auslesen
+        #Create row indices
+        rows = []
+        for kprime in range(0, len(K_space)):
+            l_aux = K_space[kprime]['l']
+            for mprime in range(0, 2*l_aux+1):
+                rows.append([kprime,mprime])
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
-        results = list(executor.map(supermatrix_parallel_one_row, rows, [l] * len(rows), [n] * len(rows),
-                                   [delta_freq_quadrat] * len(rows), [magnetic_field_s] * len(rows), [magnetic_field_sprime] * len(rows), [eigen_tag] * len(rows)))
+        # gets either SLURM_CPUS_PER_TASK or the number of CPU cores from the system
+        num_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count()))  #number of cpus
 
-    combined_result = np.vstack(results)
-    return combined_result
+        # Execute parallel processing
+        with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+            results = list(executor.map(supermatrix_parallel_one_row, rows, [l] * len(rows), [n] * len(rows),
+                                       [delta_freq_quadrat] * len(rows), [magnetic_field_s] * len(rows), [magnetic_field_sprime] * len(rows), [eigen_tag] * len(rows), [model_name] * len(rows)))
 
+        # Combine rows
+        combined_result = np.vstack(results)
+        return combined_result
+
+    except Exception as e:
+        print(f"An error occurred during parallel processing: {e}")
+        raise e
 
 #INDEX MAP
 def create_index_map(l,n, K_space):
-    print(f'Create index map for l={l}, n={n}')
-    size=0
-    for i in range(0,len(K_space)):
-        for iprime in range(0, len(K_space)):
-            size=size+(2*K_space[i]['l']+1)*(2*K_space[iprime]['l']+1)
-    if np.sqrt(size) %1 ==0:
-        matrix_size=int(np.sqrt(size))
-    else:
-        return ValueError('Matrixsize not an integer')
+    try:
+        print(f'Create index map for l={l}, n={n}')
 
-    dtype = np.dtype([('l', np.int64), ('n', np.int64), ('m', np.int64), ('lprime', np.int64), ('nprime', np.int64), ('mprime', np.int64)])
-    index_map = np.empty((matrix_size,matrix_size), dtype=dtype)
+        # Compute matrix size
+        size=0
+        for i in range(0,len(K_space)):
+            for iprime in range(0, len(K_space)):
+                size=size+(2*K_space[i]['l']+1)*(2*K_space[iprime]['l']+1)
 
-    row = 0
-    for kprime in range(0, len(K_space)):
-        lprime = K_space[kprime]['l']
-        nprime = K_space[kprime]['n']
-        for mprime in range(0, 2*lprime+1):
-            mprime_index = mprime
-            mprime = mprime_index-lprime
-            col = 0
-            for k in range(0, len(K_space)):
-                l = K_space[k]['l']
-                n = K_space[k]['n']
-                for m in range(0,2*l+1):
-                    m_index = m
-                    m = m_index-l
-                    index_map[row,col] = (l,n,m,lprime,nprime,mprime)
-                    col += 1
-            row += 1
-    print('Successfully created index map')
-    return index_map
+        # Check for square matrix dimension
+        if np.sqrt(size) %1 ==0:
+            matrix_size=int(np.sqrt(size))
+        else:
+            raise ValueError(f'Matrix size {size} calculated is not a square.')
 
-def save_index_map_to_file(index_map, l, n):
-    #INDEX MAP FOR APPROXIMATION
-    #name_string = f'index_map_supermatrix_array_{l}_{n}_second_approx.txt'
-    #INDEX MAP FOR FULL EIGENSPACE
-    name_string = f'index_map_supermatrix_array_{l}_{n}.txt'
-    data_dir = os.path.join(os.path.dirname(__file__), 'Output', 'Supermatrices', name_string)
+        # Define structured array for index map
+        dtype = np.dtype([('l', np.int64), ('n', np.int64), ('m', np.int64), ('lprime', np.int64), ('nprime', np.int64), ('mprime', np.int64)])
+        index_map = np.empty((matrix_size,matrix_size), dtype=dtype)
 
-    with open(data_dir, 'w') as f:
-        for row in index_map:
-            row_str = ", ".join(f"{col['l']} {col['n']} {col['m']} {col['lprime']} {col['nprime']} {col['mprime']}" for col in row)
-            f.write(row_str + "\n")
+        # Populate the index map
+        row = 0
+        for kprime in range(0, len(K_space)):
+            lprime = K_space[kprime]['l']
+            nprime = K_space[kprime]['n']
+            for mprime in range(0, 2*lprime+1):
+                mprime_index = mprime
+                mprime = mprime_index-lprime
+                col = 0
+                for k in range(0, len(K_space)):
+                    l = K_space[k]['l']
+                    n = K_space[k]['n']
+                    for m in range(0,2*l+1):
+                        m_index = m
+                        m = m_index-l
+                        index_map[row,col] = (l,n,m,lprime,nprime,mprime)
+                        col += 1
+                row += 1
 
-    print(f"Index map saved to {data_dir}")
+        print('Successfully created index map')
+        return index_map
+
+    except Exception as e:
+        print(f"An unexpected error occurred in the creation of the index map: {e}")
+        raise e
+
+def save_index_map_to_file(index_map, l, n, eigentag=None):
+    try:
+        # Initialize configuration handler
+        config = ConfigHandler()
+        # Load Model name
+        model_name = config.get("ModelConfig", "model_name")
+        if not model_name:
+            raise ValueError("The 'model_name' could not be fetched from the config.ini file under [ModelConfig] section.")
+
+
+        if eigentag == None or eigentag=='Full':
+            name_string = f'index_map_supermatrix_array_{l}_{n}_full.txt'
+        elif eigentag == 'FirstApprox':
+            name_string = f'index_map_supermatrix_array_{l}_{n}_first_approx.txt'
+        elif eigentag == 'SelfCoupling':
+            name_string = f'index_map_supermatrix_array_{l}_{n}_self_coupling.txt'
+        else:
+            # Raise an error if the eigen_tag is invalid
+            raise ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
+
+        DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', model_name, 'Supermatrices', 'IndexMaps', name_string)
+
+        with open(DATA_DIR, 'w') as f:
+            for row in index_map:
+                row_str = ", ".join(f"{col['l']} {col['n']} {col['m']} {col['lprime']} {col['nprime']} {col['mprime']}" for col in row)
+                f.write(row_str + "\n")
+
+        print(f"Index map saved to {DATA_DIR}")
+
+    except Exception as e:
+        print(f"An unexpected error occurred in saving the index map: {e}")
+        raise e
 
 def load_index_map_from_file(filename):
-    # Read lines from the file
-    with open(filename, 'r') as f:
-        lines = f.readlines()
+    try:
+        # Here only used for creating supermatrix plots
+        # Read lines from the file
+        with open(filename, 'r') as f:
+            lines = f.readlines()
 
-    # Remove newline characters
-    lines = [line.strip() for line in lines]
+        # Remove newline characters
+        lines = [line.strip() for line in lines]
 
-    # Initialize matrix size based on the number of lines
-    matrix_size = len(lines)
-    index_map = np.empty((matrix_size, matrix_size), dtype=np.dtype([('l', np.int64), ('n', np.int64), ('m', np.int64), ('lprime', np.int64), ('nprime', np.int64), ('mprime', np.int64)]))
+        # Initialize matrix size based on the number of lines
+        matrix_size = len(lines)
+        index_map = np.empty((matrix_size, matrix_size), dtype=np.dtype([('l', np.int64), ('n', np.int64), ('m', np.int64), ('lprime', np.int64), ('nprime', np.int64), ('mprime', np.int64)]))
 
-    # Parse each line and populate index_map
-    for i, line in enumerate(lines):
-        # Split line by commas to get tuples as strings
-        tuple_strs = line.split(', ')
-        tuples = []
+        # Parse each line and populate index_map
+        for i, line in enumerate(lines):
+            # Split line by commas to get tuples as strings
+            tuple_strs = line.split(', ')
+            tuples = []
 
-        # Parse each tuple string into a tuple of integers
-        for tuple_str in tuple_strs:
-            tuple_vals = tuple(map(int, tuple_str.split()))
-            tuples.append(tuple_vals)
+            # Parse each tuple string into a tuple of integers
+            for tuple_str in tuple_strs:
+                tuple_vals = tuple(map(int, tuple_str.split()))
+                tuples.append(tuple_vals)
 
-        # Assign parsed tuples to index_map
-        index_map[i] = tuples
+            # Assign parsed tuples to index_map
+            index_map[i] = tuples
 
-    return index_map
+        return index_map
+
+    except Exception as e:
+        print(f"An unexpected error occurred in loading the index map: {e}")
+        raise e
 
 
 
