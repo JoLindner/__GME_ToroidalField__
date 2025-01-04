@@ -1,9 +1,29 @@
 import configparser
+import threading
+import os
 
 class ConfigHandler:
-    def __init__(self, config_path="config.ini"):
-        self.config = configparser.ConfigParser()
-        self.config.read(config_path)
+    _instance = None
+    # Protect against race conditions in multi-threaded environments: not necessary here, since only read operations are performed
+    _lock = threading.Lock()
+
+    def __new__(cls, config_path="config.ini"):
+        # Check if the instance already exists
+        if cls._instance is None:
+            # Lock to prevent race conditions during initialization (thread-safety)
+            with cls._lock:
+            # double-check to ensure only one initialization
+                if cls._instance is None:
+                    # Check if config file exists
+                    if not os.path.exists(config_path):
+                        raise FileNotFoundError(f"Configuration file '{config_path}' does not exist.")
+                    # Initialize the instance if it does not exist
+                    cls._instance = super().__new__(cls)
+                    cls._instance.config = configparser.ConfigParser()
+                    cls._instance.config.read(config_path)
+
+        # Return the existing singleton instance (after the first creation)
+        return cls._instance
 
 
     def get(self, section, option, default=None):
