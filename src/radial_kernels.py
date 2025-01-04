@@ -24,8 +24,8 @@ def radial_integration(r, func):
 
 def MESA_structural_data(plot_rho_deriv=False):
     try:
-        # Initialize configuration handler
-        config = ConfigHandler("config.ini")
+        # Initialize configuration handler (returns single instance)
+        config = ConfigHandler()
 
         # Load stellar model
         log_folder = config.get("StellarModel", "mesa_LOGS")
@@ -210,8 +210,8 @@ def ticks_symmetric(vmin,vmax):
 
 def eigenfunctions(l,n,radius_array=np.linspace(0, 1, 5000),plot_eigenfunction=False,plot_deriv=False, plot_diff=False):
     try:
-        # Initialize configuration handler
-        config = ConfigHandler("config.ini")
+        # Initialize configuration handler instance
+        config = ConfigHandler()
 
         # Read paths to detail files
         detail_path = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE', config.get("StellarModel", "detail_GYRE_path"))
@@ -698,7 +698,7 @@ class MagneticField:
         self.s = s  # harmonic degree
 
 def main():
-    # Initialize configuration handler
+    # Initialize configuration handler (first instance)
     config = ConfigHandler("config.ini")
 
 
