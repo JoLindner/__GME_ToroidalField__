@@ -109,19 +109,24 @@ def main():
     for l in range(l_min, l_max+1):
         for n in range(n_min, n_max+1):
             # Excludes multiplets which do not penetrate into effective magnetic field range
-            criterium_large = (128 <= l < 138 and n >= 13) or (
-                    118 <= l < 128 and n >= 12) or (
-                                      108 <= l < 118 and n >= 11) or (
-                                      98 <= l < 107 and n >= 10) \
-                              or (88 <= l < 98 and n >= 9) or (
-                                      79 <= l < 88 and n >= 8) or (
-                                      69 <= l < 79 and n >= 7) \
-                              or (60 <= l < 69 and n >= 6) or (
-                                      51 <= l < 60 and n >= 5) or (
-                                      42 <= l < 51 and n >= 4) \
-                              or (31 <= l < 42 and n >= 3) or (
-                                      20 <= l < 31 and n >= 2) or l <= 19 and n >= 1
-            if GMEP.frequencies_GYRE(l,n) is not None and criterium_large:
+            if eigentag == 'FirstApprox':
+                # Note: WORKS only for Sun and MagneticFieldModel at the base of the convection zone (B_max = 300, mu = 0.713, sigma = 0.05, s = 2)
+                criterium = (128 <= l < 138 and n >= 13) or (
+                        118 <= l < 128 and n >= 12) or (
+                                          108 <= l < 118 and n >= 11) or (
+                                          98 <= l < 108 and n >= 10) \
+                                  or (88 <= l < 98 and n >= 9) or (
+                                          79 <= l < 88 and n >= 8) or (
+                                          69 <= l < 79 and n >= 7) \
+                                  or (60 <= l < 69 and n >= 6) or (
+                                          51 <= l < 60 and n >= 5) or (
+                                          42 <= l < 51 and n >= 4) \
+                                  or (31 <= l < 42 and n >= 3) or (
+                                          20 <= l < 31 and n >= 2) or l <= 19 and n >= 1
+            else:
+                criterium = True
+
+            if GMEP.frequencies_GYRE(l,n) is not None and criterium:
                 print(f'Computing multiplet l={l}, n={n}, freq={GMEP.frequencies_GYRE(l,n)} microHz with eigenspace tag {eigentag}')
                 calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat, magnetic_field_s, eigentag=eigentag)
 

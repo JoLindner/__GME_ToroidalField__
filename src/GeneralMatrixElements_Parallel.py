@@ -171,11 +171,12 @@ def eigenspace(l,n, delta_freq_quadrat, eigen_tag=None):
 
         elif eigen_tag == 'FirstApprox':
             # Apply first approximation
+            # Note: WORKS only for Sun and MagneticFieldModel at the base of the convection zone (B_max = 300, mu = 0.713, sigma = 0.05, s = 2)
             for row in summary_file:
                 criterium_large = (128 <= row['l'] < 138 and row['n_pg'] >= 13) or (
                             118 <= row['l'] < 128 and row['n_pg'] >= 12) or (
                                               108 <= row['l'] < 118 and row['n_pg'] >= 11) or (
-                                              98 <= row['l'] < 107 and row['n_pg'] >= 10) \
+                                              98 <= row['l'] < 108 and row['n_pg'] >= 10) \
                                   or (88 <= row['l'] < 98 and row['n_pg'] >= 9) or (
                                               79 <= row['l'] < 88 and row['n_pg'] >= 8) or (
                                               69 <= row['l'] < 79 and row['n_pg'] >= 7) \
