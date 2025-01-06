@@ -706,7 +706,7 @@ def main():
     B_max = config.getfloat("MagneticFieldModel", "B_max")
     mu = config.getfloat("MagneticFieldModel", "mu")
     sigma = config.getfloat("MagneticFieldModel", "sigma")
-    s = config.getfloat("MagneticFieldModel", "s")
+    s = config.getint("MagneticFieldModel", "s")
 
     # Initialize the magnetic field model
     magnetic_field_s = MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s)

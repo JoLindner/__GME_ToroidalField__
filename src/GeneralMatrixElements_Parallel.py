@@ -13,6 +13,7 @@ import sqlite3
 
 
 def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime=None, model_name=None):
+
     #Output directory initialization
     db_name_string = f'gme_results_{model_name}.db'
     DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', model_name, 'GeneralMatrixElements', db_name_string)
@@ -70,6 +71,7 @@ def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime
             S_args = (lprime, l, s, sprime, mprime, m)
 
             #H_k',k
+
             general_matrix_element=1/(4*np.pi)*(radial_kernels.R1(*R_args)[0]*angular_kernels.S1(*S_args)\
                                                     +radial_kernels.R2(*R_args)[0]*(angular_kernels.S2(*S_args)-angular_kernels.S5(*S_args))\
                                                     -radial_kernels.R3(*R_args)[0]*(angular_kernels.S3(*S_args)+angular_kernels.S6(*S_args))\
@@ -806,6 +808,23 @@ def main():
 
     K_space_2approx = eigenspace(l, n, delta_freq_quadrat, 'SelfCoupling')
     print('new: ',len(K_space_2approx), K_space_2approx)
+
+
+    #magnetic field:
+    B_max = config.getfloat("MagneticFieldModel", "B_max")
+    mu = config.getfloat("MagneticFieldModel", "mu")
+    sigma = config.getfloat("MagneticFieldModel", "sigma")
+    s = config.getint("MagneticFieldModel", "s")
+
+    # Initialize the magnetic field model
+    magnetic_field_s = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s)
+
+    m=1
+    lprime=l
+    nprime=n
+    mprime=1
+    gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, model_name=config.get('ModelConfig', 'model_name'))
+    print(gme)
 
     #end_time = time.time()
     #elapsed_time = end_time - start_time
