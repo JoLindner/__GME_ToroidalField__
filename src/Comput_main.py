@@ -6,6 +6,7 @@ import radial_kernels
 import time
 from config import ConfigHandler
 
+
 def calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None, eigentag=None, mesa_data=None):
     try:
         start_time = time.time()
@@ -72,6 +73,10 @@ def main():
     if not os.path.exists(gme_dir):
         os.makedirs(gme_dir)
         print(f"Created directory: {gme_dir}")
+    temp_dir = os.path.join(gme_dir, 'Temp')
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+        print(f"Created directory: {temp_dir}")
     sm_dir = os.path.join(model_output_dir, 'Supermatrices')
     if not os.path.exists(sm_dir):
         os.makedirs(sm_dir)
@@ -85,18 +90,19 @@ def main():
         os.makedirs(frequency_shifts_dir)
         print(f"Created directory: {frequency_shifts_dir}")
 
+    # Initialize the stellar model (MESA data)
+    mesa_data = radial_kernels.MesaData(config=config)
 
     # Load the magnetic field parameters
     B_max = config.getfloat("MagneticFieldModel", "B_max")
     mu = config.getfloat("MagneticFieldModel", "mu")
     sigma = config.getfloat("MagneticFieldModel", "sigma")
     s = config.getint("MagneticFieldModel", "s")
+    sprime = config.getint("MagneticFieldModel", "sprime", default=s)
 
     # Initialize the magnetic field model
-    magnetic_field_s = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s)
-
-    # Initialize the stellar model (MESA data)
-    mesa_data = radial_kernels.MesaData(config=config)
+    magnetic_field_s = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s, radius_array=mesa_data.radius_array)
+    magnetic_field_sprime = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=sprime, radius_array=mesa_data.radius_array)
 
     #eigenspace width and eigentag
     delta_freq_quadrat = config.getfloat("Eigenspace", "delta_freq_quadrat")  #microHz^2
@@ -132,7 +138,8 @@ def main():
 
             if GMEP.frequencies_GYRE(l,n) is not None and criterium:
                 print(f'Computing multiplet l={l}, n={n}, freq={GMEP.frequencies_GYRE(l,n)} microHz with eigenspace tag {eigentag}')
-                calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat, magnetic_field_s, eigentag=eigentag, mesa_data=mesa_data)
+                calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime, eigentag=eigentag, mesa_data=mesa_data)
+
 
     print(f'All multiplets finished.')
 

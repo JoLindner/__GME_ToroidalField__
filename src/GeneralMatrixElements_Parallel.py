@@ -9,119 +9,90 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import SymLogNorm
 from matplotlib.colors import ListedColormap
 from config import ConfigHandler
-import sqlite3
+import h5py
 import itertools
 
 
-def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None):
+def single_GME(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None, temp_name=None):
 
-    #Output directory initialization
-    db_name_string = f'gme_results_{model_name}.db'
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', model_name, 'GeneralMatrixElements', db_name_string)
-    max_retries = 10
-    backoff_factor = 2
+    # Output directory initialization
+    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', model_name, 'GeneralMatrixElements')
 
-    # Check if the database file already exists
-    if not os.path.exists(DATA_DIR):
-        print(f"Creating new database: {db_name_string}")
+    # Path initialization
+    main_db_path = os.path.join(DATA_DIR, 'main_gme_results.h5')
+    temp_file_name = f'temp_gme_results_{temp_name}.h5'
+    temp_db_path = os.path.join(DATA_DIR, 'Temp', temp_file_name)
 
-    for attempt in range(max_retries):
+    try:
         try:
-            conn = sqlite3.connect(DATA_DIR, timeout=15)
-            cursor = conn.cursor()
-            cursor.execute('''CREATE TABLE IF NOT EXISTS gme_results (
-                                    l INTEGER,
-                                    n INTEGER,
-                                    m INTEGER,
-                                    lprime INTEGER,
-                                    nprime INTEGER,
-                                    mprime INTEGER,
-                                    result DOUBLE,
-                                    PRIMARY KEY (l, n, m, lprime, nprime, mprime)
-                                  )''')
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS gme_results_indexed ON gme_results (l, n, m, lprime, nprime, mprime)
-            ''')
+            # Check if the result already exists in the main dataset
+            with h5py.File(main_db_path, 'r') as main_hdf:
+                result_key = f'/gme/{l}_{n}_{m}_{lprime}_{nprime}_{mprime}'
+                if result_key in main_hdf:
+                    result = main_hdf[result_key][()]
+                    if result is not None:
+                        print(f'GME already exists: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}, result={result}')
+                        # Return the existing result if found in the main DB
+                        return result
+        except OSError:
+            # Main database file doesn't exist yet, just continue without an error
+            pass
 
-            # Check if the result already exists
-            cursor.execute('''SELECT result FROM gme_results WHERE l=? AND n=? AND m=? AND lprime=? AND nprime=? AND mprime=?''',
-                               (l, n, m, lprime, nprime, mprime))
-            result_row = cursor.fetchone()
-
-            #Return the GME if it already exists
-            if result_row is not None:
-                return result_row[0]
-
-            #Magnetic fields
+        # Create and write to temporary file
+        with h5py.File(temp_db_path, 'w') as temp_hdf:
+            # Magnetic fields
             if magnetic_field_sprime is None:
                 magnetic_field_sprime = magnetic_field_s
             s = magnetic_field_s.s
             sprime = magnetic_field_sprime.s
 
-            #First selection rule
+            # First selection rule
             if m != mprime:
                 return 0.0
 
-            #Second selection rule
+            # Second selection rule
             if (l+lprime+s+sprime) % 2 == 1:
                 return 0.0
 
-            #GME
+            # GME computation
             radius_array = mesa_data.radius_array
             deriv_lnRho = mesa_data.deriv_lnRho
             R1_R5_args = (l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime, deriv_lnRho)
             R_args = (l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime)
             S_args = (lprime, l, s, sprime, mprime, m)
 
-            #H_k',k
+            try:
+                # H_k',k (GME):
+                general_matrix_element=1/(4*np.pi)*(radial_kernels.R1(*R1_R5_args)[0]*angular_kernels.S1(*S_args)\
+                                                        +radial_kernels.R2(*R_args)[0]*(angular_kernels.S2(*S_args)-angular_kernels.S5(*S_args))\
+                                                        -radial_kernels.R3(*R_args)[0]*(angular_kernels.S3(*S_args)+angular_kernels.S6(*S_args))\
+                                                        +radial_kernels.R4(*R_args)[0]*angular_kernels.S4(*S_args)\
+                                                        +radial_kernels.R5(*R1_R5_args)[0]*(angular_kernels.S7(*S_args)+angular_kernels.S8(*S_args))\
+                                                        +radial_kernels.R6(*R_args)[0]*(angular_kernels.S9(*S_args)-angular_kernels.S10(*S_args)+angular_kernels.S11(*S_args)\
+                                                        -2*angular_kernels.S13(*S_args)+angular_kernels.S14(*S_args)-angular_kernels.S15(*S_args)-angular_kernels.S16(*S_args)\
+                                                        -angular_kernels.S18(*S_args)-angular_kernels.S19(*S_args)-angular_kernels.S20(*S_args)-angular_kernels.S22(*S_args)\
+                                                        -angular_kernels.S23(*S_args))\
+                                                        -radial_kernels.R7(*R_args)[0]*angular_kernels.S17(*S_args)\
+                                                        -radial_kernels.R8(*R_args)[0]*angular_kernels.S21(*S_args))
 
-            general_matrix_element=1/(4*np.pi)*(radial_kernels.R1(*R1_R5_args)[0]*angular_kernels.S1(*S_args)\
-                                                    +radial_kernels.R2(*R_args)[0]*(angular_kernels.S2(*S_args)-angular_kernels.S5(*S_args))\
-                                                    -radial_kernels.R3(*R_args)[0]*(angular_kernels.S3(*S_args)+angular_kernels.S6(*S_args))\
-                                                    +radial_kernels.R4(*R_args)[0]*angular_kernels.S4(*S_args)\
-                                                    +radial_kernels.R5(*R1_R5_args)[0]*(angular_kernels.S7(*S_args)+angular_kernels.S8(*S_args))\
-                                                    +radial_kernels.R6(*R_args)[0]*(angular_kernels.S9(*S_args)-angular_kernels.S10(*S_args)+angular_kernels.S11(*S_args)\
-                                                    -2*angular_kernels.S13(*S_args)+angular_kernels.S14(*S_args)-angular_kernels.S15(*S_args)-angular_kernels.S16(*S_args)\
-                                                    -angular_kernels.S18(*S_args)-angular_kernels.S19(*S_args)-angular_kernels.S20(*S_args)-angular_kernels.S22(*S_args)\
-                                                    -angular_kernels.S23(*S_args))\
-                                                    -radial_kernels.R7(*R_args)[0]*angular_kernels.S17(*S_args)\
-                                                    -radial_kernels.R8(*R_args)[0]*angular_kernels.S21(*S_args))
+                if general_matrix_element is None:
+                    raise ValueError(f"The computed GME is None for the input parameters: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}.")
 
-            if general_matrix_element is None:
-                raise ValueError(f"The computed GME is None for the input parameters: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}.")
+            except Exception as e:
+                print(f"Failed to compute GME for the input parameters l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}. Error: {e}")
+                raise e
 
-            #SAVES ONLY modes that fulfill the selection rules, i.e. are non-zero, INTO DB
-            cursor.execute('''INSERT INTO gme_results (l, n, m, lprime, nprime, mprime, result) 
-                                  VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                               (l, n, m, lprime, nprime, mprime, general_matrix_element))
-            conn.commit()
-            print(f'Saved GM: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}, result={general_matrix_element}')
+            # Saving the computed GME to the temporary file
+            temp_hdf.create_group('gme')
+            temp_hdf.create_dataset(f'/gme/{l}_{n}_{m}_{lprime}_{nprime}_{mprime}', data=general_matrix_element)
+            print(f'Saved GME: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}, result={general_matrix_element}')
+
             return general_matrix_element
 
-        except sqlite3.OperationalError as e:
-            if 'database is locked' in str(e):
-                # Wait for a backoff period before retrying
-                wait_time = backoff_factor * (2 ** attempt)
-                print(f"Database locked, retrying in {wait_time:.2f} seconds...")
-                time.sleep(wait_time)
-            else:
-                raise e
-        except sqlite3.Error as e:
-            # Catch database errors and raise appropriate messages
-            print(f"Database error occurred: {e}")
-            conn.rollback()  # In case of failure, rollback any changes made during the transaction
-            raise e  # Re-raise the error to allow the calling function to handle it
-        except Exception as e:
-            # Catch other errors (e.g., programming errors, valueError)
-            print(f"An error occurred: {e}")
-            raise e  # Re-raise to propagate the error
-
-        finally:
-            if conn:
-                conn.close()
-
-    #If all retries fail:
-    raise sqlite3.OperationalError(f"Unable to access the database after {max_retries} retries due to locking.")
+    except Exception as e:
+        # Catch errors (e.g., programming errors, valueError)
+        print(f"An error occurred in the single_GME function: {e}")
+        raise e  # Re-raise to propagate the error
 
 
 def normalization(l,n,mesa_data):
@@ -279,13 +250,13 @@ def eigenspace_mode_search(l,n, freq_interval):
     return K_space
 
 
-def supermatrix_element(omega_ref, l, n, m, lprime, nprime, mprime, magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None):
+def supermatrix_element(omega_ref, l, n, m, lprime, nprime, mprime, magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None, temp_name=None):
     try:
         if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
 
-        # existence of gme and normal is checked in the functions
-        gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s,magnetic_field_sprime,model_name,mesa_data)
+        # Fetch GME and Normalization factor
+        gme = single_GME(l,n,m,lprime,nprime,mprime,magnetic_field_s,magnetic_field_sprime,model_name,mesa_data,temp_name)
         normal = normalization(l,n,mesa_data)
 
         # delta function
@@ -305,7 +276,7 @@ def supermatrix_element(omega_ref, l, n, m, lprime, nprime, mprime, magnetic_fie
         raise e
 
 
-def supermatrix_parallel_one_row(row, l, n, magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None, eigen_space=None):
+def supermatrix_parallel_one_row(row, row_number, l, n, magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None, eigen_space=None):
     try:
         if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
@@ -313,6 +284,9 @@ def supermatrix_parallel_one_row(row, l, n, magnetic_field_s, magnetic_field_spr
         mprime = row[1]
         omega_ref = 2*np.pi*frequencies_GYRE(l,n)
         K_space = eigen_space
+
+        # Create for each thread unique temp name
+        temp_name =f'sme_{l}_{n}_row_{row_number}'
 
         size = 0
         for i in range(0,len(K_space)):
@@ -338,7 +312,7 @@ def supermatrix_parallel_one_row(row, l, n, magnetic_field_s, magnetic_field_spr
                 m_index = m
                 m = m_index-l
                 #Z_k',k
-                sme = supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime, model_name, mesa_data)[0]
+                sme = supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime, model_name, mesa_data, temp_name)[0]
                 supermatrix_array_row[col] = sme
                 col += 1
         return np.transpose(supermatrix_array_row)
@@ -361,6 +335,8 @@ def supermatrix_parallel(l, n, magnetic_field_s, magnetic_field_sprime=None, eig
         if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
 
+
+
         # Load eigenspace
         K_space = eigen_space
 
@@ -372,13 +348,17 @@ def supermatrix_parallel(l, n, magnetic_field_s, magnetic_field_sprime=None, eig
                 rows.append([kprime,mprime])
 
         # gets either SLURM_CPUS_PER_TASK or the number of CPU cores from the system
-        num_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count()))  #number of cpus
+        num_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count()))
+
+        # Add row_number to each row
+        rows_with_numbers = [(index, row) for index, row in enumerate(rows)]
 
         # Execute parallel processing
         with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
             results = list(executor.map(
                 supermatrix_parallel_one_row,
-                rows,
+                [row[1] for row in rows_with_numbers],  # The row itself (excluding the row_number)
+                [row[0] for row in rows_with_numbers],  # row_number
                 itertools.repeat(l),
                 itertools.repeat(n),
                 itertools.repeat(magnetic_field_s),
@@ -828,6 +808,8 @@ def main():
     K_space_2approx = eigenspace(l, n, delta_freq_quadrat, 'SelfCoupling')
     print('new: ',len(K_space_2approx), K_space_2approx)
 
+    # Initialize stellar model (MESA data)
+    mesa_data = radial_kernels.MesaData(config=config)
 
     #magnetic field:
     B_max = config.getfloat("MagneticFieldModel", "B_max")
@@ -836,25 +818,23 @@ def main():
     s = config.getint("MagneticFieldModel", "s")
 
     # Initialize the magnetic field model
-    magnetic_field_s = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s)
+    magnetic_field_s = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s, radius_array=mesa_data.radius_array)
 
     start_time = time.time()
-    # Initialize stellar model (MESA data)
-    mesa_data = radial_kernels.MesaData(config=config)
 
+    # Initialize the GME
     m=1
     lprime=2
     l=2
     n=3
     nprime=3
     mprime=1
-    gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, model_name=config.get('ModelConfig', 'model_name'), mesa_data=mesa_data)
+    gme = single_GME(l,n,m,lprime,nprime,mprime,magnetic_field_s, model_name=config.get('ModelConfig', 'model_name'), mesa_data=mesa_data)
     print(gme)
 
     end_time = time.time()
     elapsed_time = end_time - start_time
     print('Elapsed time: ', elapsed_time)
-
 
     #plot_supermatrix(l, n, linthresh,3)
 

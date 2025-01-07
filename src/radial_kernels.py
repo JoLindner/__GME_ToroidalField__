@@ -104,118 +104,6 @@ class MesaData:
         plt.show()
 
 
-def magnetic_field(magnetic_field,radius_array=np.linspace(0, 1, 5000), plot_a=False ,plot_a_deriv=False, plot_B=False):
-    #read in magnetic field model
-    B_max=magnetic_field.B_max
-    s=magnetic_field.s
-    sigma=magnetic_field.sigma
-    mu=magnetic_field.mu
-    
-    #Model Gaussian distribution
-    a=1/(sigma*np.sqrt(2*np.pi))*np.exp(-0.5*((radius_array-mu)/sigma)**2)
-    #magnetic field in e_phi direction
-    Theta_Steps=2000
-    theta_array_positive=np.linspace(0,np.pi/2, int(Theta_Steps/2))
-    theta_array_negative=np.linspace(-np.pi/2, 0 , int(Theta_Steps/2))
-    a_grid_positive, theta_positive_grid = np.meshgrid(a, theta_array_positive)
-    a_grid_negative, theta_negative_grid = np.meshgrid(a, theta_array_negative)
-
-    B_positive=-a_grid_positive*1/2*co(s,0)*(sph_harm(1,s,0,theta_positive_grid).real-sph_harm(-1,s,0, theta_positive_grid).real)
-    B_negative=-a_grid_negative*1/2*co(s,0)*(sph_harm(1,s,np.pi,theta_negative_grid).real-sph_harm(-1,s,np.pi, theta_negative_grid).real)
-    B_combined = np.vstack((B_negative, B_positive))
-
-    B_scale=B_max/np.amax(B_positive)
-    B_scaled=B_scale*B_combined
-
-    a_scaled=B_scale*a
-
-    #analytic derivatives
-    a_scaled_deriv1_analytic = (-1)*B_scale/(sigma**3*np.sqrt(2*np.pi))*(radius_array-mu)*np.exp(-0.5*((radius_array-mu)/sigma)**2)
-    a_scaled_deriv2_analytic = (-1)*B_scale/(sigma**3*np.sqrt(2*np.pi))*(1-(radius_array-mu)**2/sigma**2)*np.exp(-0.5*((radius_array-mu)/sigma)**2)
-
-    if plot_a == True:
-        plt.figure(figsize=(11,8))
-        plt.plot(radius_array, a_scaled, label='Gaussian profile', color='red')
-        #plt.xlim(0.4, 1.005)
-        #plt.ylim(-50, 400)
-        plt.xlabel('r/R_Sun')
-        plt.ylabel('a')
-        plt.title('Gaussian profile for s='+str(s))
-        plt.legend()
-
-    if plot_a_deriv == True:
-        fig, ax = plt.subplots(3, 1, figsize=(10, 14))
-        ax[0].plot(radius_array, a_scaled,label='Model')
-        ax[1].plot(radius_array, a_scaled_deriv1_analytic, ':', color='red', label='1st derivative')
-        ax[2].plot(radius_array, a_scaled_deriv2_analytic, ':', color='red', label='2nd derivative')
-        ax[0].set_ylabel('a in kG')
-        ax[1].set_ylabel('first deriv a')
-        ax[2].set_ylabel('second deriv a')
-
-        for j in range(3):
-            ax[j].legend(loc='best')
-            ax[j].set_xlabel('r/R_Sun')
-        ax[0].set_title('Gaussian profile for s='+str(s))
-        plt.tight_layout()
-        plt.show()
-
-    
-    if plot_B== True:     
-        #flatten data for plotting
-        theta_array=np.linspace(-np.pi/2,np.pi/2, Theta_Steps)
-        r_grid, theta_grid = np.meshgrid(radius_array, theta_array)
-        
-        theta_flatten=theta_grid.flatten()
-        r_flatten=r_grid.flatten()
-        B_flatten=B_scaled.flatten()
-        
-        #conversion into cartesian coordinates:
-        x_array=r_flatten*np.cos(theta_flatten)
-        y_array=r_flatten*np.sin(theta_flatten)
-
-        #plot
-        plt.figure(figsize=(6,8))
-        plt.gca().set_aspect(1, adjustable='box')
-        plt.title('Magnetic field model', size=16)
-        plt.xlabel('r/R$_\odot$', size=16)
-        plt.ylabel('r/R$_\odot$', size=16)
-        plt.xlim(0, 1.05)
-        plt.ylim(-1.05,1.05)
-        plt.yticks([-1.00, -0.75, -0.50, -0.25 ,0.0, 0.25,0.50,0.75, 1.00], [1.00, 0.75, 0.50, 0.25, 0.00, 0.25, 0.50, 0.75, 1.00], fontsize=14)
-        plt.xticks([0.0, 0.25,0.50,0.75, 1.00], [0.00, 0.25, 0.50, 0.75, 1.00], fontsize=14)
-        plt.xticks(fontsize=12)
-        plt.tick_params(right=True)
-        scatter=plt.scatter(x_array,y_array, c=B_flatten, s=10, cmap='seismic', alpha=0.75)
-        colorbar=plt.colorbar(scatter, label='$B$ in kG', ticks=ticks_symmetric(-B_max,B_max), shrink=1)
-        colorbar.set_label(label='$B$ in kG',size=16)
-        colorbar.ax.tick_params(labelsize=14)
-        #Half circles
-        theta_half_circle = np.linspace(-np.pi/2, np.pi/2, 80)
-        x_half_circle = np.cos(theta_half_circle)
-        y_half_circle = np.sin(theta_half_circle)
-        plt.plot(x_half_circle, y_half_circle, color='black',linewidth=0.7)
-        plt.scatter(0.8*x_half_circle, 0.8*y_half_circle, color='gray',s=0.1)
-        plt.scatter(0.6*x_half_circle, 0.6*y_half_circle, color='gray',s=0.1)
-        plt.scatter(0.4*x_half_circle, 0.4*y_half_circle, color='gray',s=0.1)
-        plt.scatter(0.2*x_half_circle, 0.2*y_half_circle, color='gray',s=0.1)
-        
-        # Add a polar grid
-        r_ticks = np.linspace(0, 1, 30)
-        theta_ticks = np.linspace(-np.pi/2, np.pi/2, 15)
-        x_ticks = []
-        y_ticks = []
-        for r in r_ticks:
-            for theta in theta_ticks:
-                x_ticks.append(r * np.cos(theta))
-                y_ticks.append(r * np.sin(theta))
-        plt.scatter(x_ticks, y_ticks, color='gray', s=0.1)
-        #plt.savefig(f'MagneticFieldA.png', dpi=300, bbox_inches='tight')
-        plt.show()
-
-    
-    return a_scaled, a_scaled_deriv1_analytic, a_scaled_deriv2_analytic
-
-
 def ticks_symmetric(vmin,vmax):
     #number_of_ticks=11
     ticks = np.linspace(0, vmax, 6)
@@ -349,27 +237,33 @@ def eigenfunctions(l,n,radius_array=np.linspace(0, 1, 5000),plot_eigenfunction=F
 def R1(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None, deriv_lnRho=None, plot_kernel=False):
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
-        
-    func=magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+
+    a_scaled_s = magnetic_field_s.a_scaled
+    a_scaled_sprime = magnetic_field_sprime.a_scaled
+    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
+    a_scaled_deriv_sprime = magnetic_field_sprime.a_scaled_deriv1_analytic
+    a_scaled_deriv2_s = magnetic_field_s.a_scaled_deriv2_analytic
+
+    func=a_scaled_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array*deriv_lnRho\
-        +magnetic_field(magnetic_field_sprime,radius_array)[0]*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
-        *deriv_lnRho*magnetic_field(magnetic_field_s,radius_array)[1]\
-        +magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+        +a_scaled_sprime*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
+        *deriv_lnRho*a_scaled_deriv_s\
+        +a_scaled_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array**2\
-        -magnetic_field(magnetic_field_sprime,radius_array)[0]*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
-        /radius_array*magnetic_field(magnetic_field_s,radius_array)[1]\
-        -magnetic_field(magnetic_field_s,radius_array)[0]*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
-        /radius_array*magnetic_field(magnetic_field_sprime,radius_array)[1]\
-        -eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]*magnetic_field(magnetic_field_s,radius_array)[1]\
-        *magnetic_field(magnetic_field_sprime,radius_array)[1]\
-        -2*magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
+        -a_scaled_sprime*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
+        /radius_array*a_scaled_deriv_s\
+        -a_scaled_s*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
+        /radius_array*a_scaled_deriv_sprime\
+        -eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]*a_scaled_deriv_s\
+        *a_scaled_deriv_sprime\
+        -2*a_scaled_s*a_scaled_sprime*eigenfunctions(lprime,nprime,radius_array)[0]\
         /radius_array*eigenfunctions(l,n,radius_array)[2]\
-        -magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
+        -a_scaled_s*a_scaled_sprime*eigenfunctions(lprime,nprime,radius_array)[0]\
         *eigenfunctions(l,n,radius_array)[4]\
-        -2*magnetic_field(magnetic_field_sprime,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]*eigenfunctions(l,n,radius_array)[2]\
-        *magnetic_field(magnetic_field_s,radius_array)[1]\
-        -magnetic_field(magnetic_field_sprime,radius_array)[0]*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
-        *magnetic_field(magnetic_field_s,radius_array)[2]  #kG^2        
+        -2*a_scaled_sprime*eigenfunctions(lprime,nprime,radius_array)[0]*eigenfunctions(l,n,radius_array)[2]\
+        *a_scaled_deriv_s\
+        -a_scaled_sprime*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
+        *a_scaled_deriv2_s  #kG^2
         
         
     if plot_kernel == True:
@@ -390,11 +284,15 @@ def R1(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=Non
 def R2(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
+
+    a_scaled_s = magnetic_field_s.a_scaled
+    a_scaled_sprime = magnetic_field_sprime.a_scaled
+    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
         
-    func=magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+    func=a_scaled_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array**2\
-        +magnetic_field(magnetic_field_sprime,radius_array)[0]*eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array\
-        *magnetic_field(magnetic_field_s,radius_array)[1]
+        +a_scaled_sprime*eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array\
+        *a_scaled_deriv_s
         
     if plot_kernel == True:
         plt.figure(figsize=(11,8))
@@ -414,11 +312,15 @@ def R2(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=Non
 def R3(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
+
+    a_scaled_s = magnetic_field_s.a_scaled
+    a_scaled_sprime = magnetic_field_sprime.a_scaled
+    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
         
-    func=magnetic_field(magnetic_field_sprime,radius_array)[0]*magnetic_field(magnetic_field_s,radius_array)[1]\
+    func=a_scaled_sprime*a_scaled_deriv_s\
         *eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array\
-        +magnetic_field(magnetic_field_sprime,radius_array)[0]*eigenfunctions(l,n,radius_array)[3]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array\
-        *magnetic_field(magnetic_field_s,radius_array)[0]
+        +a_scaled_sprime*eigenfunctions(l,n,radius_array)[3]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array\
+        *a_scaled_s
         
     if plot_kernel == True:
         plt.figure(figsize=(11,8))
@@ -438,13 +340,17 @@ def R3(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=Non
 def R4(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
-        
-    func=magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+
+    a_scaled_s = magnetic_field_s.a_scaled
+    a_scaled_sprime = magnetic_field_sprime.a_scaled
+    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
+
+    func=a_scaled_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array**2\
-        -magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+        -a_scaled_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array**2\
-        +magnetic_field(magnetic_field_sprime,radius_array)[0]*eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array\
-        *magnetic_field(magnetic_field_s,radius_array)[1]
+        +a_scaled_sprime*eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array\
+        *a_scaled_deriv_s
         
         
     if plot_kernel == True:
@@ -465,14 +371,19 @@ def R4(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=Non
 def R5(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,deriv_lnRho=None,plot_kernel=False):
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
+
+    a_scaled_s = magnetic_field_s.a_scaled
+    a_scaled_sprime = magnetic_field_sprime.a_scaled
+    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
+    a_scaled_deriv_sprime = magnetic_field_sprime.a_scaled_deriv1_analytic
         
-    func=magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+    func=a_scaled_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array*deriv_lnRho\
-        -magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[1]\
+        -a_scaled_s*a_scaled_deriv_sprime\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array\
-        -magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+        -a_scaled_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[2]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array\
-        -magnetic_field(magnetic_field_s,radius_array)[1]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+        -a_scaled_deriv_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array
         
         
@@ -494,8 +405,11 @@ def R5(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=Non
 def R6(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
-        
-    func=magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+
+    a_scaled_s = magnetic_field_s.a_scaled
+    a_scaled_sprime = magnetic_field_sprime.a_scaled
+
+    func=a_scaled_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array**2 
     
     if plot_kernel == True:
@@ -516,12 +430,16 @@ def R6(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=Non
 def R7(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
+
+    a_scaled_s = magnetic_field_s.a_scaled
+    a_scaled_sprime = magnetic_field_sprime.a_scaled
+    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
         
-    func=magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+    func=a_scaled_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array**2\
-        +magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+        +a_scaled_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[2]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array\
-        +magnetic_field(magnetic_field_s,radius_array)[1]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+        +a_scaled_deriv_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array
     
     if plot_kernel == True:
@@ -542,10 +460,14 @@ def R7(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=Non
 def R8(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
+
+    a_scaled_s = magnetic_field_s.a_scaled
+    a_scaled_sprime = magnetic_field_sprime.a_scaled
+    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
         
-    func=magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+    func=a_scaled_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array**2\
-        +magnetic_field(magnetic_field_s,radius_array)[1]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
+        +a_scaled_deriv_s*a_scaled_sprime\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array
     
     if plot_kernel == True:
@@ -707,38 +629,196 @@ def plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field
 
 
 class MagneticField:
-    def __init__(self, B_max, mu, sigma, s):
+    def __init__(self, B_max, mu, sigma, s, radius_array=np.linspace(0, 1, 5000)):
         self.B_max = B_max  # in kG
         self.mu = mu  # in R_sun
         self.sigma = sigma  # in R_sun
         self.s = s  # harmonic degree
+        self.radius_array = radius_array  # radial resolution of magnetic field
+        self.Theta_Steps = 2000  # angular resolution of magnetic field
+
+        # Compute the magnetic field immediately on object creation
+        self.compute_field()
+
+    def compute_field(self):
+        # read in magnetic field model
+        B_max = self.B_max
+        s = self.s
+        sigma = self.sigma
+        mu = self.mu
+
+        # Model Gaussian distribution
+        a = 1 / (sigma * np.sqrt(2 * np.pi)) * np.exp(-0.5 * ((self.radius_array - mu) / sigma) ** 2)
+        # magnetic field in e_phi direction
+        theta_array_positive = np.linspace(0, np.pi / 2, int(self.Theta_Steps / 2))
+        theta_array_negative = np.linspace(-np.pi / 2, 0, int(self.Theta_Steps / 2))
+        a_grid_positive, theta_positive_grid = np.meshgrid(a, theta_array_positive)
+        a_grid_negative, theta_negative_grid = np.meshgrid(a, theta_array_negative)
+
+        B_positive = -a_grid_positive * 1 / 2 * co(s, 0) * (
+                    sph_harm(1, s, 0, theta_positive_grid).real - sph_harm(-1, s, 0, theta_positive_grid).real)
+        B_negative = -a_grid_negative * 1 / 2 * co(s, 0) * (
+                    sph_harm(1, s, np.pi, theta_negative_grid).real - sph_harm(-1, s, np.pi, theta_negative_grid).real)
+        B_combined = np.vstack((B_negative, B_positive))
+
+        B_scale = B_max / np.amax(B_positive)
+        B_scaled = B_scale * B_combined
+        self.B_scaled = B_scaled
+
+        a_scaled = B_scale * a
+
+        # analytic derivatives
+        a_scaled_deriv1_analytic = (-1) * B_scale / (sigma ** 3 * np.sqrt(2 * np.pi)) * (self.radius_array - mu) * np.exp(
+            -0.5 * ((self.radius_array - mu) / sigma) ** 2)
+        a_scaled_deriv2_analytic = (-1) * B_scale / (sigma ** 3 * np.sqrt(2 * np.pi)) * (
+                    1 - (self.radius_array - mu) ** 2 / sigma ** 2) * np.exp(-0.5 * ((self.radius_array - mu) / sigma) ** 2)
+
+        self.a_scaled = a_scaled
+        self.a_scaled_deriv1_analytic = a_scaled_deriv1_analytic
+        self.a_scaled_deriv2_analytic = a_scaled_deriv2_analytic
+
+    def plot_a(self, save=False):
+        plt.figure(figsize=(11, 8))
+        plt.plot(self.radius_array, self.a_scaled, label='Gaussian profile', color='red')
+        # plt.xlim(0.4, 1.005)
+        # plt.ylim(-50, 400)
+        plt.xlabel('r/R_Sun')
+        plt.ylabel('a')
+        plt.title('Gaussian profile for s=' + str(self.s))
+        plt.legend()
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, 'MagneticField_Gaussian_profile.png')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
+        plt.show()
+
+    def plot_a_deriv(self, save=False):
+        fig, ax = plt.subplots(3, 1, figsize=(10, 14))
+        ax[0].plot(self.radius_array, self.a_scaled, label='Model')
+        ax[1].plot(self.radius_array, self.a_scaled_deriv1_analytic, ':', color='red', label='1st derivative')
+        ax[2].plot(self.radius_array, self.a_scaled_deriv2_analytic, ':', color='red', label='2nd derivative')
+        ax[0].set_ylabel('a in kG')
+        ax[1].set_ylabel('first deriv a')
+        ax[2].set_ylabel('second deriv a')
+
+        for j in range(3):
+            ax[j].legend(loc='best')
+            ax[j].set_xlabel('r/R_Sun')
+        ax[0].set_title('Gaussian profile for s=' + str(self.s))
+        plt.tight_layout()
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, 'MagneticField_Gaussian_profile_deriv.png')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
+        plt.show()
+
+    def plot_B(self, save=False):
+        # flatten data for plotting
+        theta_array = np.linspace(-np.pi / 2, np.pi / 2, self.Theta_Steps)
+        r_grid, theta_grid = np.meshgrid(self.radius_array, theta_array)
+
+        theta_flatten = theta_grid.flatten()
+        r_flatten = r_grid.flatten()
+        B_flatten = self.B_scaled.flatten()
+
+        # conversion into cartesian coordinates:
+        x_array = r_flatten * np.cos(theta_flatten)
+        y_array = r_flatten * np.sin(theta_flatten)
+
+        # plot
+        plt.figure(figsize=(6, 8))
+        plt.gca().set_aspect(1, adjustable='box')
+        plt.title('Magnetic field model', size=16)
+        plt.xlabel('r/R$_\odot$', size=16)
+        plt.ylabel('r/R$_\odot$', size=16)
+        plt.xlim(0, 1.05)
+        plt.ylim(-1.05, 1.05)
+        plt.yticks([-1.00, -0.75, -0.50, -0.25, 0.0, 0.25, 0.50, 0.75, 1.00],
+                       [1.00, 0.75, 0.50, 0.25, 0.00, 0.25, 0.50, 0.75, 1.00], fontsize=14)
+        plt.xticks([0.0, 0.25, 0.50, 0.75, 1.00], [0.00, 0.25, 0.50, 0.75, 1.00], fontsize=14)
+        plt.xticks(fontsize=12)
+        plt.tick_params(right=True)
+        scatter = plt.scatter(x_array, y_array, c=B_flatten, s=10, cmap='seismic', alpha=0.75)
+        colorbar = plt.colorbar(scatter, label='$B$ in kG', ticks=ticks_symmetric(-self.B_max, self.B_max), shrink=1)
+        colorbar.set_label(label='$B$ in kG', size=16)
+        colorbar.ax.tick_params(labelsize=14)
+        # Half circles
+        theta_half_circle = np.linspace(-np.pi / 2, np.pi / 2, 80)
+        x_half_circle = np.cos(theta_half_circle)
+        y_half_circle = np.sin(theta_half_circle)
+        plt.plot(x_half_circle, y_half_circle, color='black', linewidth=0.7)
+        plt.scatter(0.8 * x_half_circle, 0.8 * y_half_circle, color='gray', s=0.1)
+        plt.scatter(0.6 * x_half_circle, 0.6 * y_half_circle, color='gray', s=0.1)
+        plt.scatter(0.4 * x_half_circle, 0.4 * y_half_circle, color='gray', s=0.1)
+        plt.scatter(0.2 * x_half_circle, 0.2 * y_half_circle, color='gray', s=0.1)
+
+        # Add a polar grid
+        r_ticks = np.linspace(0, 1, 30)
+        theta_ticks = np.linspace(-np.pi / 2, np.pi / 2, 15)
+        x_ticks = []
+        y_ticks = []
+        for r in r_ticks:
+            for theta in theta_ticks:
+                x_ticks.append(r * np.cos(theta))
+                y_ticks.append(r * np.sin(theta))
+        plt.scatter(x_ticks, y_ticks, color='gray', s=0.1)
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, f'MagneticField_Bmax_{self.B_max}_mu_{self.mu}_sigma_{self.sigma}_s_{self.s}.png')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
+        plt.show()
+
 
 def main():
     # Initialize configuration handler (first instance)
     config = ConfigHandler("config.ini")
 
-    # Initialize magnetic field:
+    # Initialize stellar model (MESA data)
+    mesa_data = MesaData(config=config)
+
+    # plot mesa_data
+    #mesa_data.plot_rho_deriv(save=False)
+
+    # Initialize magnetic field model:
     B_max = config.getfloat("MagneticFieldModel", "B_max")
     mu = config.getfloat("MagneticFieldModel", "mu")
     sigma = config.getfloat("MagneticFieldModel", "sigma")
     s = config.getint("MagneticFieldModel", "s")
+    sprime = config.getint("MagneticFieldModel", "sprime", default=s)
+    magnetic_field_s = MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s, radius_array=mesa_data.radius_array)
+    magnetic_field_sprime = MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=sprime, radius_array=mesa_data.radius_array)
 
-    # Initialize magnetic field model
-    magnetic_field_s = MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s)
-
-    # Initialize stellar model (MESA data)
-    mesa_data = MesaData(config=config)
-
-    #plot mesa_data
-    #mesa_data.plot_rho_deriv(save=False)
+    # Plot magnetic field models
+    #magnetic_field_s.plot_B(save=False)
+    #magnetic_field_s.plot_a_deriv(save=False)
+    #magnetic_field_sprime.plot_B(save=False)
+    #magnetic_field_sprime.plot_a_deriv(save=False)
 
     # Extract radius_array from MESA class
     radius_array = mesa_data.radius_array
 
-    #plot magnetic field
-    magnetic_field(magnetic_field_s, radius_array, False, False, False)
+    # Test Radial Kernels
+    test_radial_kernels = False
+    if test_radial_kernels:
+        l,n,lprime,nprime = 2, 3, 5, 2
+        plot_kernel=False
+        print('For [l,n,lprime,nprime]=['+str(l),str(n),str(lprime),str(nprime)+'] and a magnetic_field with [B_max,mu,sigma,s]=['\
+              ,str(magnetic_field_s.B_max),str(magnetic_field_s.mu),str(magnetic_field_s.sigma),str(magnetic_field_s.s)+']\n')
 
-    #TEST AREA:
+        print('R1='+str(R1(l,n,lprime,nprime,radius_array,magnetic_field_s,deriv_lnRho=mesa_data.deriv_lnRho,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
+        print('R2='+str(R2(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
+        print('R3='+str(R3(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
+        print('R4='+str(R4(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
+        print('R5='+str(R5(l,n,lprime,nprime,radius_array,magnetic_field_s,deriv_lnRho=mesa_data.deriv_lnRho,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
+        print('R6='+str(R6(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
+        print('R7='+str(R7(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
+        print('R8='+str(R8(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
+
+
+    # TEST AREA:
 
     '''
     #Plot radial kernel of l=5 n=0
@@ -793,18 +873,6 @@ def main():
 
     '''
     plot_all_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
-
-    print('For [l,n,lprime,nprime]=['+str(l),str(n),str(lprime),str(nprime)+'] and a magnetic_field with [B_max,mu,sigma,s]=['\
-          ,str(magnetic_field_s.B_max),str(magnetic_field_s.mu),str(magnetic_field_s.sigma),str(magnetic_field_s.s)+']\n')
-
-    print('R1='+str(R1(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R2='+str(R2(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R3='+str(R3(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R4='+str(R4(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R5='+str(R5(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R6='+str(R6(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R7='+str(R7(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
-    print('R8='+str(R8(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=True)[0])+' kG^2*R_sun^3')
     '''
 
 if __name__== '__main__':
