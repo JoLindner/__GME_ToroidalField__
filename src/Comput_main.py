@@ -13,13 +13,16 @@ def calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat,magnetic_field_
         if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
 
-        #Create and Save index map
-        index_map = GMEP.create_index_map(l,n,GMEP.eigenspace(l,n,delta_freq_quadrat, eigentag))
+        # Create eigenspace
+        K_space = GMEP.eigenspace(l,n,delta_freq_quadrat, eigentag)
+
+        # Create and Save index map
+        index_map = GMEP.create_index_map(l, n, K_space)
         GMEP.save_index_map_to_file(index_map, l, n, eigentag)
 
-        #Calculate and save supermatrix
-        #ALL GME involved are safed in database for later use
-        sme = GMEP.supermatrix_parallel(l, n, delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime, eigentag, mesa_data)
+        # Calculate and save supermatrix
+        # ALL GME involved are saved in database for later use
+        sme = GMEP.supermatrix_parallel(l, n, magnetic_field_s, magnetic_field_sprime, K_space, mesa_data)
         if eigentag is None or eigentag == 'Full':
             name_string = f'supermatrix_array_{l}_{n}_full.txt'
         elif eigentag == 'FirstApprox':
@@ -33,7 +36,7 @@ def calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat,magnetic_field_
         np.savetxt(DATA_DIR, sme, delimiter=' ')
         print(f'Supermatrix of l={l} n={n} multiplet with {eigentag} eigenspace saved to {DATA_DIR}')
 
-        #Calculate and save frequency shifts for (l,n)-modes
+        # Calculate and save frequency shifts for (l,n)-modes
         f_shifts=fs.calculate_safe_extract_freq_shifts(l,n,eigentag)
         print(f'Results of Frequency shifts for l={l} n={n} multiplet:')
         print(f_shifts)

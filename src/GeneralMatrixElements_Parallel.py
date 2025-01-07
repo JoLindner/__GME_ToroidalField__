@@ -140,6 +140,7 @@ def normalization(l,n,mesa_data):
 
     return radial_integration_result  # g*R_sun^2
 
+
 def frequencies_GYRE(l,n):
     try:
         # Initialize configuration handler
@@ -168,11 +169,12 @@ def frequencies_GYRE(l,n):
 
     return filterd_freq  #microHz
 
-def eigenspace(l,n, delta_freq_quadrat, eigen_tag=None):
-    try:
-        #TAGS: Default/Full: full eigenspace; FirstApprox: first approximation; SelfCoupling: Only self-coupling (second Approximation)
 
-        # doesnt matter here if I calculate the eigenspaces from the frequencies insteat of angular frequencies
+def eigenspace(l,n, delta_freq_quadrat, eigentag=None):
+    try:
+        # TAGS: Default/Full: full eigenspace; FirstApprox: first approximation; SelfCoupling: Only self-coupling (second Approximation)
+
+        # doesn't matter here if I calculate the eigenspaces from the frequencies instead of angular frequencies
         freq_ref = frequencies_GYRE(l, n)
 
         # Initialize configuration handler
@@ -184,7 +186,7 @@ def eigenspace(l,n, delta_freq_quadrat, eigen_tag=None):
         summary_file = pg.read_output(DATA_DIR)
         K_space = []
 
-        if eigen_tag is None or eigen_tag=='Full':
+        if eigentag is None or eigentag == 'Full':
             #FULL EIGENSPACE
             #delta_freq in microHz
             for row in summary_file:
@@ -195,7 +197,7 @@ def eigenspace(l,n, delta_freq_quadrat, eigen_tag=None):
                         'l': row['l']}
                     K_space.append(new_row)
 
-        elif eigen_tag == 'FirstApprox':
+        elif eigentag == 'FirstApprox':
             # Apply first approximation
             # Note: WORKS only for Sun and MagneticFieldModel at the base of the convection zone (B_max = 300, mu = 0.713, sigma = 0.05, s = 2)
             for row in summary_file:
@@ -222,7 +224,7 @@ def eigenspace(l,n, delta_freq_quadrat, eigen_tag=None):
                             'l': row['l']}
                         K_space.append(new_row)
 
-        elif eigen_tag == 'SelfCoupling':
+        elif eigentag == 'SelfCoupling':
             # Only self-coupling (second approximation)
             for row in summary_file:
                 if abs(row['freq'].real ** 2 - freq_ref ** 2) <= delta_freq_quadrat:
@@ -277,20 +279,20 @@ def eigenspace_mode_search(l,n, freq_interval):
     return K_space
 
 
-def supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime, magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None):
+def supermatrix_element(omega_ref, l, n, m, lprime, nprime, mprime, magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None):
     try:
         if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
 
-        #existence of gme and normal is checked in the functions
+        # existence of gme and normal is checked in the functions
         gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s,magnetic_field_sprime,model_name,mesa_data)
         normal = normalization(l,n,mesa_data)
 
-        #delta function
+        # delta function
         delta = 1 if l == lprime and n == nprime and m == mprime else 0
 
-        #includes conversion factor 10**12*10**6*R_sun to yield microHz^2
-        sme = gme/normal*10**12*10**6*mesa_data.R_sun-(omega_ref**2-(2*np.pi*frequencies_GYRE(l,n))**2)*delta  #microHz^2
+        # includes conversion factor 10**12*10**6*R_sun to yield microHz^2
+        sme = gme/normal*10**12*10**6*mesa_data.R_sun-(omega_ref**2-(2*np.pi*frequencies_GYRE(l,n))**2)*delta  # microHz^2
 
         if sme is None:
             raise ValueError(f"Supermatrix element (SME) is None for inputs: "
@@ -303,25 +305,25 @@ def supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime, magnetic_field_s, 
         raise e
 
 
-def supermatrix_parallel_one_row(row,l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None, eigen_tag=None, model_name=None, mesa_data=None):
+def supermatrix_parallel_one_row(row, l, n, magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None, eigen_space=None):
     try:
         if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
         kprime = row[0]
         mprime = row[1]
         omega_ref = 2*np.pi*frequencies_GYRE(l,n)
-        K_space = eigenspace(l,n, delta_freq_quadrat, eigen_tag)
+        K_space = eigen_space
 
-        size=0
+        size = 0
         for i in range(0,len(K_space)):
             for iprime in range(0, len(K_space)):
-                size=size+(2*K_space[i]['l']+1)*(2*K_space[iprime]['l']+1)
-        if np.sqrt(size) %1 ==0:
-            matrix_size=int(np.sqrt(size))
+                size = size+(2*K_space[i]['l']+1)*(2*K_space[iprime]['l']+1)
+        if np.sqrt(size) % 1 == 0:
+            matrix_size = int(np.sqrt(size))
         else:
             raise ValueError('Matrixsize not an integer')
 
-        supermatrix_array_row = np.empty((matrix_size), dtype=np.float64)
+        supermatrix_array_row = np.empty(matrix_size, dtype=np.float64)
 
         # fill supermatrix
         lprime = int(K_space[kprime]['l'])
@@ -345,12 +347,13 @@ def supermatrix_parallel_one_row(row,l,n,delta_freq_quadrat,magnetic_field_s, ma
         print(f"An error occurred in computing a row of the supermatrix: {e}")
         raise e
 
-def supermatrix_parallel(l,n, delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime=None, eigen_tag=None, mesa_data=None):
+
+def supermatrix_parallel(l, n, magnetic_field_s, magnetic_field_sprime=None, eigen_space=None, mesa_data=None):
     # Initialize configuration handler
     config = ConfigHandler()
-    #Load Model name
+    # Load Model name
     model_name = config.get("ModelConfig", "model_name")
-    #Check if Model name exists
+    # Check if Model name exists
     if not model_name:
         raise ValueError("The 'model_name' could not be fetched from the config.ini file under [ModelConfig] section.")
 
@@ -358,10 +361,10 @@ def supermatrix_parallel(l,n, delta_freq_quadrat, magnetic_field_s, magnetic_fie
         if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
 
-        #generate eigenspace
-        K_space = eigenspace(l,n,delta_freq_quadrat, eigen_tag)
+        # Load eigenspace
+        K_space = eigen_space
 
-        #Create row indices
+        # Create row indices
         rows = []
         for kprime in range(0, len(K_space)):
             l_aux = K_space[kprime]['l']
@@ -378,12 +381,11 @@ def supermatrix_parallel(l,n, delta_freq_quadrat, magnetic_field_s, magnetic_fie
                 rows,
                 itertools.repeat(l),
                 itertools.repeat(n),
-                itertools.repeat(delta_freq_quadrat),
                 itertools.repeat(magnetic_field_s),
                 itertools.repeat(magnetic_field_sprime),
-                itertools.repeat(eigen_tag),
                 itertools.repeat(model_name),
-                itertools.repeat(mesa_data)
+                itertools.repeat(mesa_data),
+                itertools.repeat(K_space)
             ))
 
         # Combine rows
@@ -393,6 +395,7 @@ def supermatrix_parallel(l,n, delta_freq_quadrat, magnetic_field_s, magnetic_fie
     except Exception as e:
         print(f"An error occurred during parallel processing: {e}")
         raise e
+
 
 #INDEX MAP
 def create_index_map(l,n, K_space):
@@ -441,6 +444,7 @@ def create_index_map(l,n, K_space):
         print(f"An unexpected error occurred in the creation of the index map: {e}")
         raise e
 
+
 def save_index_map_to_file(index_map, l, n, eigentag=None):
     try:
         # Initialize configuration handler
@@ -474,6 +478,7 @@ def save_index_map_to_file(index_map, l, n, eigentag=None):
         print(f"An unexpected error occurred in saving the index map: {e}")
         raise e
 
+
 def load_index_map_from_file(filename):
     try:
         # Read lines from the file
@@ -506,7 +511,6 @@ def load_index_map_from_file(filename):
     except Exception as e:
         print(f"An unexpected error occurred in loading the index map: {e}")
         raise e
-
 
 
 #SUPERMATRIX PLOTS
@@ -797,7 +801,6 @@ def plot_supermatrix_l5_n12(l, n, linthresh, trunc=None):
     plt.show()
 
 
-
 #TEST AREA
 def main():
     #start_time = time.time()
@@ -819,7 +822,7 @@ def main():
     K_space_old = eigenspace(l, n, delta_freq_quadrat)
     print('old: ',len(K_space_old), K_space_old)
 
-    K_space_1approx = eigenspace(l, n, delta_freq_quadrat, eigen_tag='FirstApprox')
+    K_space_1approx = eigenspace(l, n, delta_freq_quadrat, eigentag='FirstApprox')
     print('new: ',len(K_space_1approx), K_space_1approx)
 
     K_space_2approx = eigenspace(l, n, delta_freq_quadrat, 'SelfCoupling')

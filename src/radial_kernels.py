@@ -22,6 +22,7 @@ def radial_integration(r, func):
 
     return integral
 
+
 class MesaData:
     def __init__(self, config=None):
         # Initialize configuration handler (returns single instance)
@@ -214,12 +215,14 @@ def magnetic_field(magnetic_field,radius_array=np.linspace(0, 1, 5000), plot_a=F
     
     return a_scaled, a_scaled_deriv1_analytic, a_scaled_deriv2_analytic
 
+
 def ticks_symmetric(vmin,vmax):
     #number_of_ticks=11
     ticks = np.linspace(0, vmax, 6)
     ticks_combined= np.concatenate((ticks, -ticks))
     
     return ticks_combined
+
 
 def eigenfunctions(l,n,radius_array=np.linspace(0, 1, 5000),plot_eigenfunction=False,plot_deriv=False, plot_diff=False):
     try:
