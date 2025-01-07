@@ -22,73 +22,86 @@ def radial_integration(r, func):
 
     return integral
 
-def MESA_structural_data(plot_rho_deriv=False):
-    try:
+class MesaData:
+    def __init__(self, config=None):
         # Initialize configuration handler (returns single instance)
-        config = ConfigHandler()
+        self.config = config if config else ConfigHandler()
+        # Load mesa data when initialized
+        self.load_mesa_data()
 
-        # Load stellar model
-        log_folder = config.get("StellarModel", "mesa_LOGS")
-        DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'Stellar_model', log_folder)
+    def load_mesa_data(self):
+        try:
+            # Load stellar model
+            log_folder = self.config.get("StellarModel", "mesa_LOGS")
+            DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'Stellar_model', log_folder)
 
-        # Check if LOG folder exists
-        if not os.path.exists(DATA_DIR):
-            raise FileNotFoundError(f"The specified log folder {log_folder} does not exist in {DATA_DIR}. Please verify the path in config.ini.")
-        # Check if history.data exists
-        if not os.path.exists(os.path.join(DATA_DIR, 'history.data')):
-            raise FileNotFoundError(f"history.data file is missing in the folder {log_folder}. Please verify the presence of the file.")
+            # Check if LOG folder exists
+            if not os.path.exists(DATA_DIR):
+                raise FileNotFoundError(
+                    f"The specified log folder {log_folder} does not exist in {DATA_DIR}. Please verify the path in config.ini.")
+            # Check if history.data exists
+            if not os.path.exists(os.path.join(DATA_DIR, 'history.data')):
+                raise FileNotFoundError(
+                    f"history.data file is missing in the folder {log_folder}. Please verify the presence of the file.")
 
-        #Load MESA profiles and history data
-        LOGS = mr.MesaLogDir(DATA_DIR)
-        his = mr.MesaData(os.path.join(DATA_DIR, 'history.data'))
+            # Load MESA profiles and history data
+            LOGS = mr.MesaLogDir(DATA_DIR)
+            his = mr.MesaData(os.path.join(DATA_DIR, 'history.data'))
 
-        #Load last profile
-        Star_lastprofile = LOGS.profile_data()
+            # Load last profile
+            Star_lastprofile = LOGS.profile_data()
 
-        # Ensure the necessary profile data attributes exist
-        if not hasattr(Star_lastprofile, 'dlnRho_dr') or not hasattr(Star_lastprofile, 'logRho') or not hasattr(Star_lastprofile, 'logR') or not hasattr(his, 'rsun'):
-            raise AttributeError("Missing expected attributes in the profile or history data.")
+            # Ensure the necessary profile data attributes exist
+            if not hasattr(Star_lastprofile, 'dlnRho_dr') or not hasattr(Star_lastprofile, 'logRho') or not hasattr(
+                    Star_lastprofile, 'logR') or not hasattr(his, 'rsun'):
+                raise AttributeError("Missing expected attributes in the profile or history data.")
 
-        deriv_lnRho = Star_lastprofile.dlnRho_dr
-        rho_0 = np.power(10, Star_lastprofile.logRho)  #rho_0 at outer boundary of zone in g/cm$^3$
-        radius_array = np.power(10, Star_lastprofile.logR)  #r/R_sun at outer boundary of zone
-        #READ OUT HISTORY VARIABLES
-        R_sun=his.rsun  #cm
+            # reversed to start from 0 to R_star
+            self.deriv_lnRho = Star_lastprofile.dlnRho_dr[::-1]
+            self.rho_0 = np.power(10, Star_lastprofile.logRho)[::-1]  # rho_0 at outer boundary of zone in g/cm$^3$
+            self.radius_array = np.power(10, Star_lastprofile.logR)[::-1]  # r/R_sun at outer boundary of zone
+            # READ OUT HISTORY VARIABLES
+            self.R_sun = his.rsun  # cm
 
+            if self.radius_array is None or self.deriv_lnRho is None or self.rho_0 is None or self.R_sun is None:
+                raise ValueError("MESA data is not loaded correctly.")
 
-        if plot_rho_deriv==True:
-            plt.figure(figsize=(11,8))
-            plt.plot(radius_array, deriv_lnRho, label='Density gradient', color='red')
-            plt.xlim(radius_array[0]*0.95, radius_array[0]*1.1)
-            #plt.ylim(-50, 400)
-            plt.xlabel('r/R_Sun')
-            plt.ylabel('d/dr ln(rho_0)')
-            plt.title('Density gradient')
-            plt.legend()
-            plt.show()
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            raise
+        except AttributeError as e:
+            print(f"Error: {e}")
+            raise
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            raise
 
-            plt.figure(figsize=(11,8))
-            plt.plot(radius_array, rho_0, label='Density', color='red')
-            plt.xlim(0, radius_array[0]*1.1)
-            #plt.ylim(-50, 400)
-            plt.xlabel('r/R_Sun')
-            plt.ylabel('rho$_0$ in g/cm$^3$')
-            plt.title('Density gradient')
-            plt.legend()
-            plt.show()
+    def plot_rho_deriv(self, save=False):
+        plt.figure(figsize=(11, 8))
+        plt.plot(self.radius_array, self.deriv_lnRho, label='Density gradient', color='red')
+        plt.xlim(self.radius_array[-1] * 0.95, self.radius_array[-1] * 1.1)
+        # plt.ylim(-50, 400)
+        plt.xlabel('r/R_Sun')
+        plt.ylabel('d/dr ln(rho_0)')
+        plt.title('Density gradient')
+        plt.legend()
+        plt.show()
 
+        plt.figure(figsize=(11, 8))
+        plt.plot(self.radius_array, self.rho_0, label='Density', color='red')
+        plt.xlim(0, self.radius_array[-1] * 1.1)
+        # plt.ylim(-50, 400)
+        plt.xlabel('r/R_Sun')
+        plt.ylabel('rho$_0$ in g/cm$^3$')
+        plt.title('Density gradient')
+        plt.legend()
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, 'Density_gradient.png')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
+        plt.show()
 
-        return radius_array[::-1], deriv_lnRho[::-1], rho_0[::-1], R_sun    #reversed to start from 0 to R_star
-
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
-        raise
-    except AttributeError as e:
-        print(f"Error: {e}")
-        raise
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        raise
 
 def magnetic_field(magnetic_field,radius_array=np.linspace(0, 1, 5000), plot_a=False ,plot_a_deriv=False, plot_B=False):
     #read in magnetic field model
@@ -330,14 +343,14 @@ def eigenfunctions(l,n,radius_array=np.linspace(0, 1, 5000),plot_eigenfunction=F
 
 
 #Radial Kernels
-def R1(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
+def R1(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None, deriv_lnRho=None, plot_kernel=False):
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
         
     func=magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array*MESA_structural_data()[1]\
+        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array*deriv_lnRho\
         +magnetic_field(magnetic_field_sprime,radius_array)[0]*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
-        *MESA_structural_data()[1]*magnetic_field(magnetic_field_s,radius_array)[1]\
+        *deriv_lnRho*magnetic_field(magnetic_field_s,radius_array)[1]\
         +magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array**2\
         -magnetic_field(magnetic_field_sprime,radius_array)[0]*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
@@ -446,12 +459,12 @@ def R4(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=Non
 
     return radial_integration(radius_array, func*radius_array**2), func
 
-def R5(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
+def R5(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,deriv_lnRho=None,plot_kernel=False):
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
         
     func=magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array*MESA_structural_data()[1]\
+        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array*deriv_lnRho\
         -magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[1]\
         *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array\
         -magnetic_field(magnetic_field_s,radius_array)[0]*magnetic_field(magnetic_field_sprime,radius_array)[0]\
@@ -701,19 +714,25 @@ def main():
     # Initialize configuration handler (first instance)
     config = ConfigHandler("config.ini")
 
-
-    #magnetic field:
+    # Initialize magnetic field:
     B_max = config.getfloat("MagneticFieldModel", "B_max")
     mu = config.getfloat("MagneticFieldModel", "mu")
     sigma = config.getfloat("MagneticFieldModel", "sigma")
     s = config.getint("MagneticFieldModel", "s")
 
-    # Initialize the magnetic field model
+    # Initialize magnetic field model
     magnetic_field_s = MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s)
 
-    #extract radius_array from MESA_structural_data
-    radius_array=MESA_structural_data(True)[0]
+    # Initialize stellar model (MESA data)
+    mesa_data = MesaData(config=config)
 
+    #plot mesa_data
+    #mesa_data.plot_rho_deriv(save=False)
+
+    # Extract radius_array from MESA class
+    radius_array = mesa_data.radius_array
+
+    #plot magnetic field
     magnetic_field(magnetic_field_s, radius_array, False, False, False)
 
     #TEST AREA:

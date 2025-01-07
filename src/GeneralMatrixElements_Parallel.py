@@ -10,9 +10,10 @@ from matplotlib.colors import SymLogNorm
 from matplotlib.colors import ListedColormap
 from config import ConfigHandler
 import sqlite3
+import itertools
 
 
-def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime=None, model_name=None):
+def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None):
 
     #Output directory initialization
     db_name_string = f'gme_results_{model_name}.db'
@@ -66,17 +67,19 @@ def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime
                 return 0.0
 
             #GME
-            radius_array = radial_kernels.MESA_structural_data()[0]
+            radius_array = mesa_data.radius_array
+            deriv_lnRho = mesa_data.deriv_lnRho
+            R1_R5_args = (l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime, deriv_lnRho)
             R_args = (l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime)
             S_args = (lprime, l, s, sprime, mprime, m)
 
             #H_k',k
 
-            general_matrix_element=1/(4*np.pi)*(radial_kernels.R1(*R_args)[0]*angular_kernels.S1(*S_args)\
+            general_matrix_element=1/(4*np.pi)*(radial_kernels.R1(*R1_R5_args)[0]*angular_kernels.S1(*S_args)\
                                                     +radial_kernels.R2(*R_args)[0]*(angular_kernels.S2(*S_args)-angular_kernels.S5(*S_args))\
                                                     -radial_kernels.R3(*R_args)[0]*(angular_kernels.S3(*S_args)+angular_kernels.S6(*S_args))\
                                                     +radial_kernels.R4(*R_args)[0]*angular_kernels.S4(*S_args)\
-                                                    +radial_kernels.R5(*R_args)[0]*(angular_kernels.S7(*S_args)+angular_kernels.S8(*S_args))\
+                                                    +radial_kernels.R5(*R1_R5_args)[0]*(angular_kernels.S7(*S_args)+angular_kernels.S8(*S_args))\
                                                     +radial_kernels.R6(*R_args)[0]*(angular_kernels.S9(*S_args)-angular_kernels.S10(*S_args)+angular_kernels.S11(*S_args)\
                                                     -2*angular_kernels.S13(*S_args)+angular_kernels.S14(*S_args)-angular_kernels.S15(*S_args)-angular_kernels.S16(*S_args)\
                                                     -angular_kernels.S18(*S_args)-angular_kernels.S19(*S_args)-angular_kernels.S20(*S_args)-angular_kernels.S22(*S_args)\
@@ -121,17 +124,20 @@ def single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime
     raise sqlite3.OperationalError(f"Unable to access the database after {max_retries} retries due to locking.")
 
 
-def normalization(l,n):
+def normalization(l,n,mesa_data):
     #Get MESA structural data
-    radius_array = radial_kernels.MESA_structural_data()[0]
-    r_sun = radial_kernels.MESA_structural_data()[3]  # r_sun in cm
-    rho_0 = radial_kernels.MESA_structural_data()[2]*r_sun**3 #g/R_sun^3
+    radius_array = mesa_data.radius_array
+    r_sun = mesa_data.R_sun  # r_sun in cm
+    rho_0 = mesa_data.rho_0*r_sun**3 #g/R_sun^3
+
     #Calculate function to integrate
     func = rho_0*(radial_kernels.eigenfunctions(l,n,radius_array)[0]**2+l*(l+1)*radial_kernels.eigenfunctions(l,n,radius_array)[1]**2)*radius_array**2
     # Perform the radial integration
     radial_integration_result = radial_kernels.radial_integration(radius_array, func) #g*R_sun^2
+
     if radial_integration_result is None:
         raise ValueError(f"Radial integration for normalization function failed for l={l} and n={n} and resulted in None.")
+
     return radial_integration_result  # g*R_sun^2
 
 def frequencies_GYRE(l,n):
@@ -271,20 +277,20 @@ def eigenspace_mode_search(l,n, freq_interval):
     return K_space
 
 
-def supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime, magnetic_field_s, magnetic_field_sprime=None, model_name=None):
+def supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime, magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None):
     try:
         if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
 
         #existence of gme and normal is checked in the functions
-        gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s,magnetic_field_sprime,model_name)
-        normal = normalization(l,n)
+        gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s,magnetic_field_sprime,model_name,mesa_data)
+        normal = normalization(l,n,mesa_data)
 
         #delta function
         delta = 1 if l == lprime and n == nprime and m == mprime else 0
 
         #includes conversion factor 10**12*10**6*R_sun to yield microHz^2
-        sme = gme/normal*10**12*10**6*radial_kernels.MESA_structural_data()[3]-(omega_ref**2-(2*np.pi*frequencies_GYRE(l,n))**2)*delta  #microHz^2
+        sme = gme/normal*10**12*10**6*mesa_data.R_sun-(omega_ref**2-(2*np.pi*frequencies_GYRE(l,n))**2)*delta  #microHz^2
 
         if sme is None:
             raise ValueError(f"Supermatrix element (SME) is None for inputs: "
@@ -297,7 +303,7 @@ def supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime, magnetic_field_s, 
         raise e
 
 
-def supermatrix_parallel_one_row(row,l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None, eigen_tag=None, model_name=None):
+def supermatrix_parallel_one_row(row,l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None, eigen_tag=None, model_name=None, mesa_data=None):
     try:
         if magnetic_field_sprime is None:
             magnetic_field_sprime = magnetic_field_s
@@ -330,7 +336,7 @@ def supermatrix_parallel_one_row(row,l,n,delta_freq_quadrat,magnetic_field_s, ma
                 m_index = m
                 m = m_index-l
                 #Z_k',k
-                sme = supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime, model_name)[0]
+                sme = supermatrix_element(omega_ref,l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime, model_name, mesa_data)[0]
                 supermatrix_array_row[col] = sme
                 col += 1
         return np.transpose(supermatrix_array_row)
@@ -339,7 +345,7 @@ def supermatrix_parallel_one_row(row,l,n,delta_freq_quadrat,magnetic_field_s, ma
         print(f"An error occurred in computing a row of the supermatrix: {e}")
         raise e
 
-def supermatrix_parallel(l,n, delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime=None, eigen_tag=None):
+def supermatrix_parallel(l,n, delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime=None, eigen_tag=None, mesa_data=None):
     # Initialize configuration handler
     config = ConfigHandler()
     #Load Model name
@@ -367,8 +373,18 @@ def supermatrix_parallel(l,n, delta_freq_quadrat, magnetic_field_s, magnetic_fie
 
         # Execute parallel processing
         with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
-            results = list(executor.map(supermatrix_parallel_one_row, rows, [l] * len(rows), [n] * len(rows),
-                                       [delta_freq_quadrat] * len(rows), [magnetic_field_s] * len(rows), [magnetic_field_sprime] * len(rows), [eigen_tag] * len(rows), [model_name] * len(rows)))
+            results = list(executor.map(
+                supermatrix_parallel_one_row,
+                rows,
+                itertools.repeat(l),
+                itertools.repeat(n),
+                itertools.repeat(delta_freq_quadrat),
+                itertools.repeat(magnetic_field_s),
+                itertools.repeat(magnetic_field_sprime),
+                itertools.repeat(eigen_tag),
+                itertools.repeat(model_name),
+                itertools.repeat(mesa_data)
+            ))
 
         # Combine rows
         combined_result = np.vstack(results)
@@ -819,16 +835,24 @@ def main():
     # Initialize the magnetic field model
     magnetic_field_s = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s)
 
+    start_time = time.time()
+    # Initialize stellar model (MESA data)
+    mesa_data = radial_kernels.MesaData(config=config)
+
     m=1
-    lprime=l
-    nprime=n
+    lprime=2
+    l=2
+    n=3
+    nprime=3
     mprime=1
-    gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, model_name=config.get('ModelConfig', 'model_name'))
+    gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_s, model_name=config.get('ModelConfig', 'model_name'), mesa_data=mesa_data)
     print(gme)
 
-    #end_time = time.time()
-    #elapsed_time = end_time - start_time
-    #print(elapsed_time)
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print('Elapsed time: ', elapsed_time)
+
+
     #plot_supermatrix(l, n, linthresh,3)
 
 
