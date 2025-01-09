@@ -7,6 +7,7 @@ import mesa_reader as mr
 from constants import c_const as co
 import os
 from config import ConfigHandler
+import time
 
 
 def radial_integration(r, func):
@@ -233,399 +234,322 @@ def eigenfunctions(l,n,radius_array=np.linspace(0, 1, 5000),plot_eigenfunction=F
         raise
 
 
-#Radial Kernels
-def R1(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None, deriv_lnRho=None, plot_kernel=False):
-    if magnetic_field_sprime is None:
-        magnetic_field_sprime = magnetic_field_s
+class RadialKernels:
+    def __init__(self, l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime=None, deriv_lnRho=None):
+        # Initialize parameters
+        self.l = l
+        self.n = n
+        self.lprime = lprime
+        self.nprime = nprime
+        self.radius_array = radius_array
+        self.magnetic_field_s = magnetic_field_s
+        self.magnetic_field_sprime = magnetic_field_sprime
+        self.deriv_lnRho = deriv_lnRho
 
-    a_scaled_s = magnetic_field_s.a_scaled
-    a_scaled_sprime = magnetic_field_sprime.a_scaled
-    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
-    a_scaled_deriv_sprime = magnetic_field_sprime.a_scaled_deriv1_analytic
-    a_scaled_deriv2_s = magnetic_field_s.a_scaled_deriv2_analytic
+        if magnetic_field_sprime is None:
+            magnetic_field_sprime = magnetic_field_s
 
-    func=a_scaled_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array*deriv_lnRho\
-        +a_scaled_sprime*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
-        *deriv_lnRho*a_scaled_deriv_s\
-        +a_scaled_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array**2\
-        -a_scaled_sprime*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
-        /radius_array*a_scaled_deriv_s\
-        -a_scaled_s*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
-        /radius_array*a_scaled_deriv_sprime\
-        -eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]*a_scaled_deriv_s\
-        *a_scaled_deriv_sprime\
-        -2*a_scaled_s*a_scaled_sprime*eigenfunctions(lprime,nprime,radius_array)[0]\
-        /radius_array*eigenfunctions(l,n,radius_array)[2]\
-        -a_scaled_s*a_scaled_sprime*eigenfunctions(lprime,nprime,radius_array)[0]\
-        *eigenfunctions(l,n,radius_array)[4]\
-        -2*a_scaled_sprime*eigenfunctions(lprime,nprime,radius_array)[0]*eigenfunctions(l,n,radius_array)[2]\
-        *a_scaled_deriv_s\
-        -a_scaled_sprime*eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]\
-        *a_scaled_deriv2_s  #kG^2
-        
-        
-    if plot_kernel == True:
+        # Compute magnetic field parameters
+        self.a_scaled_s = magnetic_field_s.a_scaled
+        self.a_scaled_sprime = magnetic_field_sprime.a_scaled
+        self.a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
+        self.a_scaled_deriv_sprime = magnetic_field_sprime.a_scaled_deriv1_analytic
+        self.a_scaled_deriv2_s = magnetic_field_s.a_scaled_deriv2_analytic
+
+        # Compute eigenfunctions
+        self.eigenfunction_r = eigenfunctions(self.l, self.n, self.radius_array)[0]
+        self.eigenfunction_r_prime = eigenfunctions(self.lprime, self.nprime, self.radius_array)[0]
+        self.eigenfunction_h = eigenfunctions(self.l, self.n, self.radius_array)[1]
+        self.eigenfunction_h_prime = eigenfunctions(self.lprime, self.nprime, self.radius_array)[1]
+        self.eigenfunction_r_deriv1 = eigenfunctions(self.l, self.n, self.radius_array)[2]
+        self.eigenfunction_r_deriv1_prime = eigenfunctions(self.lprime, self.nprime, self.radius_array)[2]
+        self.eigenfunction_h_deriv1 = eigenfunctions(self.l, self.n, self.radius_array)[3]
+        self.eigenfunction_h_deriv1_prime = eigenfunctions(self.lprime, self.nprime, self.radius_array)[3]
+        self.eigenfunction_r_deriv2 = eigenfunctions(self.l, self.n, self.radius_array)[4]
+        self.eigenfunction_r_deriv2_prime = eigenfunctions(self.lprime, self.nprime, self.radius_array)[4]
+        self.eigenfunction_h_deriv2 = eigenfunctions(self.l, self.n, self.radius_array)[5]
+        self.eigenfunction_h_deriv2_prime = eigenfunctions(self.lprime, self.nprime, self.radius_array)[5]
+
+        # Compute radial kernels
+        self.compute_R1()
+        self.compute_R2()
+        self.compute_R3()
+        self.compute_R4()
+        self.compute_R5()
+        self.compute_R6()
+        self.compute_R7()
+        self.compute_R8()
+
+    def compute_R1(self):
+        func = (
+                self.a_scaled_s * self.a_scaled_sprime
+                * self.eigenfunction_r * self.eigenfunction_r_prime / self.radius_array * self.deriv_lnRho
+                + self.a_scaled_sprime * self.eigenfunction_r * self.eigenfunction_r_prime
+                * self.deriv_lnRho * self.a_scaled_deriv_s
+                + self.a_scaled_s * self.a_scaled_sprime
+                * self.eigenfunction_r * self.eigenfunction_r_prime / self.radius_array ** 2
+                - self.a_scaled_sprime * self.eigenfunction_r * self.eigenfunction_r_prime
+                / self.radius_array * self.a_scaled_deriv_s
+                - self.a_scaled_s * self.eigenfunction_r * self.eigenfunction_r_prime
+                / self.radius_array * self.a_scaled_deriv_sprime
+                - self.eigenfunction_r * self.eigenfunction_r_prime
+                * self.a_scaled_deriv_s * self.a_scaled_deriv_sprime
+                - 2 * self.a_scaled_s * self.a_scaled_sprime
+                * self.eigenfunction_r_prime / self.radius_array * self.eigenfunction_r_deriv1
+                - self.a_scaled_s * self.a_scaled_sprime
+                * self.eigenfunction_r_prime * self.eigenfunction_r_deriv2
+                - 2 * self.a_scaled_sprime * self.eigenfunction_r_prime
+                * self.eigenfunction_r_deriv1 * self.a_scaled_deriv_s
+                - self.a_scaled_sprime * self.eigenfunction_r
+                * self.eigenfunction_r_prime * self.a_scaled_deriv2_s  # kG^2
+        )
+
+
+        self.R1_func = func
+        self.R1 = radial_integration(self.radius_array, func * self.radius_array ** 2)
+
+    def compute_R2(self):
+        func = self.a_scaled_s * self.a_scaled_sprime \
+               * self.eigenfunction_h * self.eigenfunction_r_prime / self.radius_array ** 2 \
+               + self.a_scaled_sprime * self.eigenfunction_h * self.eigenfunction_r_prime / self.radius_array \
+               * self.a_scaled_deriv_s
+
+        self.R2_func = func
+        self.R2 = radial_integration(self.radius_array, func * self.radius_array ** 2)
+
+    def compute_R3(self):
+        func = self.a_scaled_sprime * self.a_scaled_deriv_s \
+               * self.eigenfunction_h * self.eigenfunction_r_prime / self.radius_array \
+               + self.a_scaled_sprime * self.eigenfunction_h_deriv1 * self.eigenfunction_r_prime / self.radius_array \
+               * self.a_scaled_s
+
+        self.R3_func = func
+        self.R3 = radial_integration(self.radius_array, func * self.radius_array ** 2)
+
+    def compute_R4(self):
+        func = self.a_scaled_s * self.a_scaled_sprime \
+               * self.eigenfunction_h * self.eigenfunction_r_prime / self.radius_array ** 2 \
+               - self.a_scaled_s * self.a_scaled_sprime \
+               * self.eigenfunction_r * self.eigenfunction_r_prime / self.radius_array ** 2 \
+               + self.a_scaled_sprime * self.eigenfunction_h * self.eigenfunction_r_prime / self.radius_array \
+               * self.a_scaled_deriv_s
+
+        self.R4_func = func
+        self.R4 = radial_integration(self.radius_array, func * self.radius_array ** 2)
+
+    def compute_R5(self):
+        func = self.a_scaled_s * self.a_scaled_sprime \
+               * self.eigenfunction_r * self.eigenfunction_h_prime / self.radius_array * self.deriv_lnRho \
+               - self.a_scaled_s * self.a_scaled_deriv_sprime \
+               * self.eigenfunction_r * self.eigenfunction_h_prime / self.radius_array \
+               - self.a_scaled_s * self.a_scaled_sprime \
+               * self.eigenfunction_r_deriv1 * self.eigenfunction_h_prime / self.radius_array \
+               - self.a_scaled_deriv_s * self.a_scaled_sprime \
+               * self.eigenfunction_r * self.eigenfunction_h_prime / self.radius_array
+
+        self.R5_func = func
+        self.R5 = radial_integration(self.radius_array, func * self.radius_array ** 2)
+
+    def compute_R6(self):
+        func = self.a_scaled_s * self.a_scaled_sprime \
+               * self.eigenfunction_h * self.eigenfunction_h_prime / self.radius_array ** 2
+
+        self.R6_func = func
+        self.R6 = radial_integration(self.radius_array, func * self.radius_array ** 2)
+
+    def compute_R7(self):
+        func = self.a_scaled_s * self.a_scaled_sprime \
+               * self.eigenfunction_r * self.eigenfunction_h_prime / self.radius_array ** 2 \
+               + self.a_scaled_s * self.a_scaled_sprime \
+               * self.eigenfunction_r_deriv1 * self.eigenfunction_h_prime / self.radius_array \
+               + self.a_scaled_deriv_s * self.a_scaled_sprime \
+               * self.eigenfunction_r * self.eigenfunction_h_prime / self.radius_array
+
+        self.R7_func = func
+        self.R7 = radial_integration(self.radius_array, func * self.radius_array ** 2)
+
+    def compute_R8(self):
+        func = self.a_scaled_s * self.a_scaled_sprime \
+               * self.eigenfunction_r * self.eigenfunction_h_prime / self.radius_array ** 2 \
+               + self.a_scaled_deriv_s * self.a_scaled_sprime \
+               * self.eigenfunction_r * self.eigenfunction_h_prime / self.radius_array
+
+        self.R8_func = func
+        self.R8 = radial_integration(self.radius_array, func * self.radius_array ** 2)
+
+    def plot_single_radial_kernel(self, radial_number, save=False):
+        if not isinstance(radial_number, int) and radial_number < 1 or radial_number > 8:
+            raise TypeError('Radial number must be an integer between 1 and 8')
+        kernel_name = f'R{radial_number}_func'
+        if hasattr(self, kernel_name):
+            kernel = getattr(self, kernel_name)
+        else:
+            raise ValueError(f'Error: {kernel_name} not found')
+
+        # Plot the radial kernel
         plt.figure(figsize=(11,8))
-        plt.plot(radius_array, func, label='radial kernel $R_1$', color='red')
+        plt.plot(self.radius_array, kernel, label=f'Radial kernel $R_{radial_number}$', color='red')
         #plt.xlim(0.4, 1.005)
         #plt.ylim(-50, 400)
         plt.xlabel('$r/R_\odot$')
-        plt.ylabel('$R_1$ in kG$^2$')
+        plt.ylabel(f'$R_{radial_number}$ in kG$^2$')
         title = 'For [l,n,lprime,nprime]=[{},{},{},{}] and a magnetic_field with [B_max,mu,sigma,s]=[{},{},{},{}]'.format(
-            l, n, lprime, nprime, magnetic_field_s.B_max, magnetic_field_s.mu, magnetic_field_s.sigma, magnetic_field_s.s)        
+            self.l, self.n, self.lprime, self.nprime, self.magnetic_field_s.B_max, self.magnetic_field_s.mu, self.magnetic_field_s.sigma, self.magnetic_field_s.s)
         plt.title(title)
         plt.legend()
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, f'R_{radial_number}_l_{self.l}_n_{self.n}_lprime_{self.lprime}_nprime_{self.nprime}.png')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
         plt.show()
-        
-    return radial_integration(radius_array, func*radius_array**2), func
 
-def R2(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
-    if magnetic_field_sprime is None:
-        magnetic_field_sprime = magnetic_field_s
-
-    a_scaled_s = magnetic_field_s.a_scaled
-    a_scaled_sprime = magnetic_field_sprime.a_scaled
-    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
-        
-    func=a_scaled_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array**2\
-        +a_scaled_sprime*eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array\
-        *a_scaled_deriv_s
-        
-    if plot_kernel == True:
-        plt.figure(figsize=(11,8))
-        plt.plot(radius_array, func, label='radial kernel $R_2$', color='red')
-        #plt.xlim(0.4, 1.005)
-        #plt.ylim(-50, 400)
-        plt.xlabel('$r/R_\odot$')
-        plt.ylabel('$R_2$ in kG$^2$')
+    def plot_all_radialKernels(self, xlim=(0,1), save=False):
+        # Logarithmic plot
+        plt.figure(figsize=(11, 8))
+        plt.plot(self.radius_array, self.R1_func, label='radial kernel R1')
+        plt.plot(self.radius_array, self.R2_func, label='radial kernel R2')
+        plt.plot(self.radius_array, self.R3_func, label='radial kernel R3')
+        plt.plot(self.radius_array, self.R4_func, label='radial kernel R4')
+        plt.plot(self.radius_array, self.R5_func, label='radial kernel R5')
+        plt.plot(self.radius_array, self.R6_func, label='radial kernel R6')
+        plt.plot(self.radius_array, self.R7_func, label='radial kernel R7')
+        plt.plot(self.radius_array, self.R8_func, label='radial kernel R8')
+        plt.xlim(xlim)
+        # plt.ylim(-50, 400)
+        plt.xlabel('r/R_Sun')
+        plt.ylabel('Radial Kernels [kG$^2$]')
         title = 'For [l,n,lprime,nprime]=[{},{},{},{}] and a magnetic_field with [B_max,mu,sigma,s]=[{},{},{},{}]'.format(
-            l, n, lprime, nprime, magnetic_field_s.B_max, magnetic_field_s.mu, magnetic_field_s.sigma, magnetic_field_s.s)        
+            self.l, self.n, self.lprime, self.nprime, self.magnetic_field_s.B_max, self.magnetic_field_s.mu, self.magnetic_field_s.sigma,
+            self.magnetic_field_s.s)
         plt.title(title)
         plt.legend()
+        plt.yscale('symlog')
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, f'All_Radial_Kernel_log_l_{self.l}_n_{self.n}_lprime_{self.lprime}_nprime_{self.nprime}.png')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
         plt.show()
 
-    return radial_integration(radius_array, func*radius_array**2), func
 
-def R3(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
-    if magnetic_field_sprime is None:
-        magnetic_field_sprime = magnetic_field_s
-
-    a_scaled_s = magnetic_field_s.a_scaled
-    a_scaled_sprime = magnetic_field_sprime.a_scaled
-    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
-        
-    func=a_scaled_sprime*a_scaled_deriv_s\
-        *eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array\
-        +a_scaled_sprime*eigenfunctions(l,n,radius_array)[3]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array\
-        *a_scaled_s
-        
-    if plot_kernel == True:
-        plt.figure(figsize=(11,8))
-        plt.plot(radius_array, func, label='radial kernel $R_3$', color='red')
-        #plt.xlim(0.4, 1.005)
-        #plt.ylim(-50, 400)
-        plt.xlabel('$r/R_\odot$')
-        plt.ylabel('$R_3$ in kG$^2$')
-        title = 'For [l,n,lprime,nprime]=[{},{},{},{}] and a magnetic_field with [B_max,mu,sigma,s]=[{},{},{},{}]'.format(
-            l, n, lprime, nprime, magnetic_field_s.B_max, magnetic_field_s.mu, magnetic_field_s.sigma, magnetic_field_s.s)        
-        plt.title(title)
-        plt.legend()
-        plt.show()
-
-    return radial_integration(radius_array, func*radius_array**2), func
-
-def R4(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
-    if magnetic_field_sprime is None:
-        magnetic_field_sprime = magnetic_field_s
-
-    a_scaled_s = magnetic_field_s.a_scaled
-    a_scaled_sprime = magnetic_field_sprime.a_scaled
-    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
-
-    func=a_scaled_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array**2\
-        -a_scaled_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array**2\
-        +a_scaled_sprime*eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[0]/radius_array\
-        *a_scaled_deriv_s
-        
-        
-    if plot_kernel == True:
-        plt.figure(figsize=(11,8))
-        plt.plot(radius_array, func, label='radial kernel $R_4$', color='red')
-        #plt.xlim(0.4, 1.005)
-        #plt.ylim(-50, 400)
-        plt.xlabel('$r/R_\odot$')
-        plt.ylabel('$R_4$ in kG$^2$')
-        title = 'For [l,n,lprime,nprime]=[{},{},{},{}] and a magnetic_field with [B_max,mu,sigma,s]=[{},{},{},{}]'.format(
-            l, n, lprime, nprime, magnetic_field_s.B_max, magnetic_field_s.mu, magnetic_field_s.sigma, magnetic_field_s.s)        
-        plt.title(title)
-        plt.legend()
-        plt.show()
-
-    return radial_integration(radius_array, func*radius_array**2), func
-
-def R5(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,deriv_lnRho=None,plot_kernel=False):
-    if magnetic_field_sprime is None:
-        magnetic_field_sprime = magnetic_field_s
-
-    a_scaled_s = magnetic_field_s.a_scaled
-    a_scaled_sprime = magnetic_field_sprime.a_scaled
-    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
-    a_scaled_deriv_sprime = magnetic_field_sprime.a_scaled_deriv1_analytic
-        
-    func=a_scaled_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array*deriv_lnRho\
-        -a_scaled_s*a_scaled_deriv_sprime\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array\
-        -a_scaled_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[2]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array\
-        -a_scaled_deriv_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array
-        
-        
-    if plot_kernel == True:
-        plt.figure(figsize=(11,8))
-        plt.plot(radius_array, func, label='radial kernel $R_5$', color='red')
-        #plt.xlim(0.4, 1.005)
-        #plt.ylim(-50, 400)
-        plt.xlabel('$r/R_\odot$')
-        plt.ylabel('$R_5$ in kG$^2$')
-        title = 'For [l,n,lprime,nprime]=[{},{},{},{}] and a magnetic_field with [B_max,mu,sigma,s]=[{},{},{},{}]'.format(
-            l, n, lprime, nprime, magnetic_field_s.B_max, magnetic_field_s.mu, magnetic_field_s.sigma, magnetic_field_s.s)        
-        plt.title(title)
-        plt.legend()
-        plt.show()
-
-    return radial_integration(radius_array, func*radius_array**2), func
-
-def R6(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
-    if magnetic_field_sprime is None:
-        magnetic_field_sprime = magnetic_field_s
-
-    a_scaled_s = magnetic_field_s.a_scaled
-    a_scaled_sprime = magnetic_field_sprime.a_scaled
-
-    func=a_scaled_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[1]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array**2 
-    
-    if plot_kernel == True:
-        plt.figure(figsize=(11,8))
-        plt.plot(radius_array, func, label='radial kernel $R_6$', color='red')
-        #plt.xlim(0.4, 1.005)
-        #plt.ylim(-50, 400)
-        plt.xlabel('$r/R_\odot$')
-        plt.ylabel('$R_6$ in kG$^2$')
-        title = 'For [l,n,lprime,nprime]=[{},{},{},{}] and a magnetic_field with [B_max,mu,sigma,s]=[{},{},{},{}]'.format(
-            l, n, lprime, nprime, magnetic_field_s.B_max, magnetic_field_s.mu, magnetic_field_s.sigma, magnetic_field_s.s)        
-        plt.title(title)
-        plt.legend()
-        plt.show()
-
-    return radial_integration(radius_array, func*radius_array**2), func
-
-def R7(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
-    if magnetic_field_sprime is None:
-        magnetic_field_sprime = magnetic_field_s
-
-    a_scaled_s = magnetic_field_s.a_scaled
-    a_scaled_sprime = magnetic_field_sprime.a_scaled
-    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
-        
-    func=a_scaled_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array**2\
-        +a_scaled_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[2]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array\
-        +a_scaled_deriv_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array
-    
-    if plot_kernel == True:
-        plt.figure(figsize=(11,8))
-        plt.plot(radius_array, func, label='radial kernel $R_7$', color='red')
-        #plt.xlim(0.4, 1.005)
-        #plt.ylim(-50, 400)
-        plt.xlabel('$r/R_\odot$')
-        plt.ylabel('$R_7$ in kG$^2$')
-        title = 'For [l,n,lprime,nprime]=[{},{},{},{}] and a magnetic_field with [B_max,mu,sigma,s]=[{},{},{},{}]'.format(
-            l, n, lprime, nprime, magnetic_field_s.B_max, magnetic_field_s.mu, magnetic_field_s.sigma, magnetic_field_s.s)        
-        plt.title(title)
-        plt.legend()
-        plt.show()
-
-    return radial_integration(radius_array, func*radius_array**2), func
-
-def R8(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None,plot_kernel=False):
-    if magnetic_field_sprime is None:
-        magnetic_field_sprime = magnetic_field_s
-
-    a_scaled_s = magnetic_field_s.a_scaled
-    a_scaled_sprime = magnetic_field_sprime.a_scaled
-    a_scaled_deriv_s = magnetic_field_s.a_scaled_deriv1_analytic
-        
-    func=a_scaled_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array**2\
-        +a_scaled_deriv_s*a_scaled_sprime\
-        *eigenfunctions(l,n,radius_array)[0]*eigenfunctions(lprime,nprime,radius_array)[1]/radius_array
-    
-    if plot_kernel == True:
-        plt.figure(figsize=(11,8))
-        plt.plot(radius_array, func, label='radial kernel $R_8$', color='red')
-        #plt.xlim(0.4, 1.005)
-        #plt.ylim(-50, 400)
-        plt.xlabel('$r/R_\odot$')
-        plt.ylabel('$R_8$ in kG$^2$')
-        title = 'For [l,n,lprime,nprime]=[{},{},{},{}] and a magnetic_field with [B_max,mu,sigma,s]=[{},{},{},{}]'.format(
-            l, n, lprime, nprime, magnetic_field_s.B_max, magnetic_field_s.mu, magnetic_field_s.sigma, magnetic_field_s.s)        
-        plt.title(title)
-        plt.legend()
-        plt.show()
-
-    return radial_integration(radius_array, func*radius_array**2), func
-
-def plot_all_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None):
-    #Note: magnetic_field_sprime is not used here and is assumed to be None
-    if magnetic_field_sprime is None:
-        magnetic_field_sprime = magnetic_field_s
-    
-    #Logarithmic plot in the relevant regime 
-    plt.figure(figsize=(11,8))
-    plt.plot(radius_array, R1(l,n,lprime,nprime,radius_array,magnetic_field_s)[1], label='radial kernel R1')
-    plt.plot(radius_array, R2(l,n,lprime,nprime,radius_array,magnetic_field_s)[1], label='radial kernel R2')
-    plt.plot(radius_array, R3(l,n,lprime,nprime,radius_array,magnetic_field_s)[1], label='radial kernel R3')
-    plt.plot(radius_array, R4(l,n,lprime,nprime,radius_array,magnetic_field_s)[1], label='radial kernel R4')
-    plt.plot(radius_array, R5(l,n,lprime,nprime,radius_array,magnetic_field_s)[1], label='radial kernel R5')
-    plt.plot(radius_array, R6(l,n,lprime,nprime,radius_array,magnetic_field_s)[1], label='radial kernel R6')
-    plt.plot(radius_array, R7(l,n,lprime,nprime,radius_array,magnetic_field_s)[1], label='radial kernel R7')
-    plt.plot(radius_array, R8(l,n,lprime,nprime,radius_array,magnetic_field_s)[1], label='radial kernel R8')
-    plt.xlim(0.5, 0.9)
-    #plt.ylim(-50, 400)
-    plt.xlabel('r/R_Sun')
-    plt.ylabel('Radial Kernels [kG$^2$]')
-    title = 'For [l,n,lprime,nprime]=[{},{},{},{}] and a magnetic_field with [B_max,mu,sigma,s]=[{},{},{},{}]'.format(
-        l, n, lprime, nprime, magnetic_field_s.B_max, magnetic_field_s.mu, magnetic_field_s.sigma, magnetic_field_s.s)        
-    plt.title(title)
-    plt.legend()
-    plt.yscale('symlog')
-    plt.show()
-
-def plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None):
-    #Note: magnetic_field_sprime is not used here and is assumed to be None
+def plot_several_radialKernels(l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime=None, mesa_data=None, xlim=(0.563, 0.9), split=False, save=False):
+    # Assumes same magnetic_field configuration and radius array for all radial kernels
     if magnetic_field_sprime is None:
         magnetic_field_sprime = magnetic_field_s
 
     if len(l)>10:
-        print('Can only plot up to 10 different radial kernels')
-        return
+        raise ValueError('Can only plot up to 10 different radial kernels. Reduce the size of the lists!')
+    elif not (len(l) == len(n) == len(lprime) == len(nprime)):
+            raise ValueError("All input lists must have the same length.")
 
-    colors=['blue', 'red', 'green', 'purple', 'orange', 'cyan', 'brown', 'black', 'magenta', 'yellow']
-    fig, ax = plt.subplots(4, 2, figsize=(10, 14), sharex=True)
+    # Load class objects:
+    radial_kernel_objs = []
     for i in range(len(l)):
-        ax[0][0].plot(radius_array, R1(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1], label=f'$l={l[i]}$, $n={n[i]}$, $l^\prime={lprime[i]}$, $n^\prime={nprime[i]}$', color=colors[i])
-        ax[0][1].plot(radius_array, R2(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1],
-                      color=colors[i])
-        ax[1][0].plot(radius_array, R3(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1],
-                      color=colors[i])
-        ax[1][1].plot(radius_array, R4(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1],
-                      color=colors[i])
-        ax[2][0].plot(radius_array, R5(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1],
-                      color=colors[i])
-        ax[2][1].plot(radius_array, R6(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1],
-                      color=colors[i])
-        ax[3][0].plot(radius_array, R7(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1],
-                      color=colors[i])
-        ax[3][1].plot(radius_array, R8(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1],
-                      color=colors[i])
+        radial_kernel_objs.append(RadialKernels(l[i], n[i], lprime[i], nprime[i], radius_array, magnetic_field_s, magnetic_field_sprime, deriv_lnRho=mesa_data.deriv_lnRho))
 
-    ax[0][0].set_ylabel('$R_1$ in kG$^2$', fontsize=14)
-    ax[0][1].set_ylabel('$R_2$ in kG$^2$', fontsize=14)
-    ax[1][0].set_ylabel('$R_3$ in kG$^2$', fontsize=14)
-    ax[1][1].set_ylabel('$R_4$ in kG$^2$', fontsize=14)
-    ax[2][0].set_ylabel('$R_5$ in kG$^2$', fontsize=14)
-    ax[2][1].set_ylabel('$R_6$ in kG$^2$', fontsize=14)
-    ax[3][0].set_ylabel('$R_7$ in kG$^2$', fontsize=14)
-    ax[3][1].set_ylabel('$R_8$ in kG$^2$', fontsize=14)
-    for j in range(4):
-        for i in range(2):
-            ax[j][i].set_xlim(0.563, 0.9)
-            #ax[j][i].legend(loc='upper left', fontsize=14)
-            #ax[j][i].set_yscale('symlog', linthresh=0.01)
-            ax[3][i].set_xlabel('r/R$_{\odot}$', fontsize=14)
-            ax[j][i].tick_params(axis='both', which='major', labelsize=14)
-    #ax[3][1].legend(loc='lower left', fontsize=12)
-    ncol=min(len(l),3)
-    fig.legend(loc='upper center', bbox_to_anchor=(0.5, 0), fontsize=14, ncol=ncol)
-    plt.tight_layout()
-    plt.savefig(f'Images/RadialKernels_l{l}_n{n}_lprime{lprime}_nprime{nprime}.pdf', dpi=300, bbox_inches='tight')
-    #plt.show()
+    colors = ['blue', 'red', 'green', 'purple', 'orange', 'cyan', 'brown', 'black', 'magenta', 'yellow']
 
-def plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field_s,magnetic_field_sprime=None):
-    #Note: magnetic_field_sprime is not used here and is assumed to be None
-    if magnetic_field_sprime is None:
-        magnetic_field_sprime = magnetic_field_s
+    if split:
+        # First Part
+        fig, ax = plt.subplots(2, 2, figsize=(12, 10), sharex=True)
+        for i in range(len(l)):
+            ax[0][0].plot(radius_array, radial_kernel_objs[i].R1_func, label=f'$l={l[i]}$, $n={n[i]}$, $l^\prime={lprime[i]}$, $n^\prime={nprime[i]}$',
+                          color=colors[i])
+            ax[0][1].plot(radius_array, radial_kernel_objs[i].R2_func, color=colors[i])
+            ax[1][0].plot(radius_array, radial_kernel_objs[i].R3_func, color=colors[i])
+            ax[1][1].plot(radius_array, radial_kernel_objs[i].R4_func, color=colors[i])
 
-    if len(l)>10:
-        print('Can only plot up to 10 different radial kernels')
-        return
+        ax[0][0].set_ylabel('$R_1$ in kG$^2$', fontsize=14)
+        ax[0][1].set_ylabel('$R_2$ in kG$^2$', fontsize=14)
+        ax[1][0].set_ylabel('$R_3$ in kG$^2$', fontsize=14)
+        ax[1][1].set_ylabel('$R_4$ in kG$^2$', fontsize=14)
+        for j in range(2):
+            for i in range(2):
+                ax[j][i].set_xlim(xlim)
+                # ax[j][i].legend(loc='upper left', fontsize=14)
+                # ax[j][i].set_yscale('symlog', linthresh=0.01)
+                ax[1][i].set_xlabel('r/R$_{\odot}$', fontsize=14)
+                ax[j][i].tick_params(axis='both', which='major', labelsize=14)
+        # ax[3][1].legend(loc='lower left', fontsize=12)
+        ncol = min(len(l), 3)
+        fig.legend(loc='upper center', bbox_to_anchor=(0.5, 0), fontsize=14, ncol=ncol)
+        plt.tight_layout()
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, f'RadialKernels_l{l}_n{n}_lprime{lprime}_nprime{nprime}_firstpart.pdf')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
+        plt.show()
 
-    colors=['blue', 'red', 'green', 'purple', 'orange', 'cyan', 'brown', 'black', 'magenta', 'yellow']
-    fig, ax = plt.subplots(2, 2, figsize=(12, 10), sharex=True)
-    for i in range(len(l)):
-        ax[0][0].plot(radius_array, R1(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1], label=f'$l={l[i]}$, $n={n[i]}$, $l^\prime={lprime[i]}$, $n^\prime={nprime[i]}$', color=colors[i])
-        ax[0][1].plot(radius_array, R2(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1],
-                      color=colors[i])
-        ax[1][0].plot(radius_array, R3(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1],
-                      color=colors[i])
-        ax[1][1].plot(radius_array, R4(l[i],n[i],lprime[i],nprime[i],radius_array,magnetic_field_s)[1],
-                      color=colors[i])
+        # Second Part
+        fig, ax = plt.subplots(2, 2, figsize=(12, 10), sharex=True)
+        for i in range(len(l)):
+            ax[0][0].plot(radius_array, radial_kernel_objs[i].R5_func, label=f'$l={l[i]}$, $n={n[i]}$, $l^\prime={lprime[i]}$, $n^\prime={nprime[i]}$',
+                          color=colors[i])
+            ax[0][1].plot(radius_array, radial_kernel_objs[i].R6_func, color=colors[i])
+            ax[1][0].plot(radius_array, radial_kernel_objs[i].R7_func, color=colors[i])
+            ax[1][1].plot(radius_array, radial_kernel_objs[i].R8_func, color=colors[i])
 
-    ax[0][0].set_ylabel('$R_1$ in kG$^2$', fontsize=14)
-    ax[0][1].set_ylabel('$R_2$ in kG$^2$', fontsize=14)
-    ax[1][0].set_ylabel('$R_3$ in kG$^2$', fontsize=14)
-    ax[1][1].set_ylabel('$R_4$ in kG$^2$', fontsize=14)
-    for j in range(2):
-        for i in range(2):
-            ax[j][i].set_xlim(0.563, 0.9)
-            #ax[j][i].legend(loc='upper left', fontsize=14)
-            #ax[j][i].set_yscale('symlog', linthresh=0.01)
-            ax[1][i].set_xlabel('r/R$_{\odot}$', fontsize=14)
-            ax[j][i].tick_params(axis='both', which='major', labelsize=14)
-    #ax[3][1].legend(loc='lower left', fontsize=12)
-    ncol=min(len(l),3)
-    fig.legend(loc='upper center', bbox_to_anchor=(0.5, 0), fontsize=14, ncol=ncol)
-    plt.tight_layout()
-    plt.savefig(f'Images/RadialKernels_l{l}_n{n}_lprime{lprime}_nprime{nprime}_firstpart.pdf', dpi=300, bbox_inches='tight')
+        ax[0][0].set_ylabel('$R_5$ in kG$^2$', fontsize=14)
+        ax[0][1].set_ylabel('$R_6$ in kG$^2$', fontsize=14)
+        ax[1][0].set_ylabel('$R_7$ in kG$^2$', fontsize=14)
+        ax[1][1].set_ylabel('$R_8$ in kG$^2$', fontsize=14)
+        for j in range(2):
+            for i in range(2):
+                ax[j][i].set_xlim(xlim)
+                # ax[j][i].legend(loc='upper left', fontsize=14)
+                # ax[j][i].set_yscale('symlog', linthresh=0.01)
+                ax[1][i].set_xlabel('r/R$_{\odot}$', fontsize=14)
+                ax[j][i].tick_params(axis='both', which='major', labelsize=14)
+        # ax[3][1].legend(loc='lower left', fontsize=12)
+        ncol = min(len(l), 3)
+        fig.legend(loc='upper center', bbox_to_anchor=(0.5, 0), fontsize=14, ncol=ncol)
+        plt.tight_layout()
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, f'RadialKernels_l{l}_n{n}_lprime{lprime}_nprime{nprime}_secondpart.pdf')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
+        plt.show()
 
-    fig, ax = plt.subplots(2, 2, figsize=(12, 10), sharex=True)
-    for i in range(len(l)):
-        ax[0][0].plot(radius_array, R5(l[i], n[i], lprime[i], nprime[i], radius_array, magnetic_field_s)[1], label=f'$l={l[i]}$, $n={n[i]}$, $l^\prime={lprime[i]}$, $n^\prime={nprime[i]}$',
-                      color=colors[i])
-        ax[0][1].plot(radius_array, R6(l[i], n[i], lprime[i], nprime[i], radius_array, magnetic_field_s)[1],
-                      color=colors[i])
-        ax[1][0].plot(radius_array, R7(l[i], n[i], lprime[i], nprime[i], radius_array, magnetic_field_s)[1],
-                      color=colors[i])
-        ax[1][1].plot(radius_array, R8(l[i], n[i], lprime[i], nprime[i], radius_array, magnetic_field_s)[1],
-                      color=colors[i])
+    else:
+        fig, ax = plt.subplots(4, 2, figsize=(10, 14), sharex=True)
+        for i in range(len(l)):
+            ax[0][0].plot(radius_array, radial_kernel_objs[i].R1_func, label=f'$l={l[i]}$, $n={n[i]}$, $l^\prime={lprime[i]}$, $n^\prime={nprime[i]}$', color=colors[i])
+            ax[0][1].plot(radius_array, radial_kernel_objs[i].R2_func, color=colors[i])
+            ax[1][0].plot(radius_array, radial_kernel_objs[i].R3_func, color=colors[i])
+            ax[1][1].plot(radius_array, radial_kernel_objs[i].R4_func, color=colors[i])
+            ax[2][0].plot(radius_array, radial_kernel_objs[i].R5_func, color=colors[i])
+            ax[2][1].plot(radius_array, radial_kernel_objs[i].R6_func, color=colors[i])
+            ax[3][0].plot(radius_array, radial_kernel_objs[i].R7_func, color=colors[i])
+            ax[3][1].plot(radius_array, radial_kernel_objs[i].R8_func, color=colors[i])
 
-    ax[0][0].set_ylabel('$R_5$ in kG$^2$', fontsize=14)
-    ax[0][1].set_ylabel('$R_6$ in kG$^2$', fontsize=14)
-    ax[1][0].set_ylabel('$R_7$ in kG$^2$', fontsize=14)
-    ax[1][1].set_ylabel('$R_8$ in kG$^2$', fontsize=14)
-    for j in range(2):
-        for i in range(2):
-            ax[j][i].set_xlim(0.563, 0.9)
-            # ax[j][i].legend(loc='upper left', fontsize=14)
-            # ax[j][i].set_yscale('symlog', linthresh=0.01)
-            ax[1][i].set_xlabel('r/R$_{\odot}$', fontsize=14)
-            ax[j][i].tick_params(axis='both', which='major', labelsize=14)
-    # ax[3][1].legend(loc='lower left', fontsize=12)
-    ncol = min(len(l), 3)
-    fig.legend(loc='upper center', bbox_to_anchor=(0.5, 0), fontsize=14, ncol=ncol)
-    plt.tight_layout()
-    plt.savefig(f'Images/RadialKernels_l{l}_n{n}_lprime{lprime}_nprime{nprime}_secondpart.pdf', dpi=300, bbox_inches='tight')
-    #plt.show()
+        ax[0][0].set_ylabel('$R_1$ in kG$^2$', fontsize=14)
+        ax[0][1].set_ylabel('$R_2$ in kG$^2$', fontsize=14)
+        ax[1][0].set_ylabel('$R_3$ in kG$^2$', fontsize=14)
+        ax[1][1].set_ylabel('$R_4$ in kG$^2$', fontsize=14)
+        ax[2][0].set_ylabel('$R_5$ in kG$^2$', fontsize=14)
+        ax[2][1].set_ylabel('$R_6$ in kG$^2$', fontsize=14)
+        ax[3][0].set_ylabel('$R_7$ in kG$^2$', fontsize=14)
+        ax[3][1].set_ylabel('$R_8$ in kG$^2$', fontsize=14)
+        for j in range(4):
+            for i in range(2):
+                ax[j][i].set_xlim(xlim)
+                #ax[j][i].legend(loc='upper left', fontsize=14)
+                #ax[j][i].set_yscale('symlog', linthresh=0.01)
+                ax[3][i].set_xlabel('r/R$_{\odot}$', fontsize=14)
+                ax[j][i].tick_params(axis='both', which='major', labelsize=14)
+        #ax[3][1].legend(loc='lower left', fontsize=12)
+        ncol = min(len(l), 3)
+        fig.legend(loc='upper center', bbox_to_anchor=(0.5, 0), fontsize=14, ncol=ncol)
+        plt.tight_layout()
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, f'RadialKernels_l{l}_n{n}_lprime{lprime}_nprime{nprime}.pdf')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
+        plt.show()
 
 
 class MagneticField:
@@ -800,80 +724,70 @@ def main():
     # Extract radius_array from MESA class
     radius_array = mesa_data.radius_array
 
-    # Test Radial Kernels
+
+    # Test and Plot Radial Kernels
     test_radial_kernels = False
+    plot_kernel = False
+
     if test_radial_kernels:
-        l,n,lprime,nprime = 2, 3, 5, 2
-        plot_kernel=False
-        print('For [l,n,lprime,nprime]=['+str(l),str(n),str(lprime),str(nprime)+'] and a magnetic_field with [B_max,mu,sigma,s]=['\
-              ,str(magnetic_field_s.B_max),str(magnetic_field_s.mu),str(magnetic_field_s.sigma),str(magnetic_field_s.s)+']\n')
+        start_time = time.time()
+        l, n, lprime, nprime = 107, 10, 107, 10
+        radialkernel_obj = RadialKernels(l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime, deriv_lnRho=mesa_data.deriv_lnRho)
+        print('R1=' + str(radialkernel_obj.R1) + ' kG^2*R_sun^3')
+        print('R2=' + str(radialkernel_obj.R2) + ' kG^2*R_sun^3')
+        print('R3=' + str(radialkernel_obj.R3) + ' kG^2*R_sun^3')
+        print('R4=' + str(radialkernel_obj.R4) + ' kG^2*R_sun^3')
+        print('R5=' + str(radialkernel_obj.R5) + ' kG^2*R_sun^3')
+        print('R6=' + str(radialkernel_obj.R6) + ' kG^2*R_sun^3')
+        print('R7=' + str(radialkernel_obj.R7) + ' kG^2*R_sun^3')
+        print('R8=' + str(radialkernel_obj.R8) + ' kG^2*R_sun^3')
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print('Elapsed time: ', elapsed_time)
 
-        print('R1='+str(R1(l,n,lprime,nprime,radius_array,magnetic_field_s,deriv_lnRho=mesa_data.deriv_lnRho,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
-        print('R2='+str(R2(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
-        print('R3='+str(R3(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
-        print('R4='+str(R4(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
-        print('R5='+str(R5(l,n,lprime,nprime,radius_array,magnetic_field_s,deriv_lnRho=mesa_data.deriv_lnRho,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
-        print('R6='+str(R6(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
-        print('R7='+str(R7(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
-        print('R8='+str(R8(l,n,lprime,nprime,radius_array,magnetic_field_s,plot_kernel=plot_kernel)[0])+' kG^2*R_sun^3')
+        if plot_kernel:
+            # Plot all radial kernels
+            radialkernel_obj.plot_all_radialKernels(xlim=(0.7, 1))
 
+            # Plot single Radial Kernels
+            for i in range(1,9):
+                radialkernel_obj.plot_single_radial_kernel(i)
 
-    # TEST AREA:
+    # Plot comparison of Radial Kernels
+    compare = False
+    split = False  # Makes two separate files each containing 4 radial kernels
+    if compare:
+        # l=5, n=12 radial kernels:
+        l = [5, 5, 5, 5, 5]
+        n = [12, 12, 12, 12, 12]
+        lprime = [5, 38, 94, 141, 237]
+        nprime = [12, 6, 3, 2, 1]
+        plot_several_radialKernels(l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime=None, mesa_data=None, xlim=(0.563, 0.9), split=split, save=False)
 
-    '''
-    #Plot radial kernel of l=5 n=0
-    l=[5,5,5,5,5]
-    n=[12,12,12,12,12]
-    lprime=[5,38,94,141,237]
-    nprime=[12,6,3,2,1]
-    plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field_s)
-    #plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
-    '''
-    '''
-    l=[140]
-    n=[10]
-    lprime=[140]
-    nprime=[10]
-    plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
-    '''
-    '''
-    l=[5,5,5,5]
-    n=[18,18,18,18]
-    lprime=[5,29,42,225]
-    nprime=[18,12,10,3]
-    #plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
-    plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field_s)
-    '''
-    #Plot radial kernels of l=5 n=0 eigenspace
-    '''
-    lprime=[5,5,5,5,5]
-    nprime=[0,0,0,0,0]
-    l=[3,4,5,6,7]
-    n=[1,0,0,0,0]
-    plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
-     '''
-    '''
-    #Plot radial kernels of l=5 n=6 eigenspace
-    l=[5,5,5,5,5,5,5]
-    n=[6,6,6,6,6,6,6]
-    lprime=[2,5,9,23,66,154,155]
-    nprime=[7,6,5,3,1,0,0]
-    plot_radialKernels_for_Defense(l,n,lprime,nprime,radius_array,magnetic_field_s)
-    '''
-    '''
-    lprime=[5,5,5]
-    nprime=[6,6,6]
-    l=[66,154,155]
-    n=[1,0,0]
-    plot_several_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
-    '''
-    #eigenfunctions(l,n, radius_array, False, False, plot_diff = False)
-    #eigenfunctions(lprime,nprime, radius_array, False, False)
-    #MESA_structural_data(False)
+        # Other List Examples
+        '''
+        # l=5 n=6 radial kernels:
+        l=[5,5,5,5,5,5,5]
+        n=[6,6,6,6,6,6,6]
+        lprime=[2,5,9,23,66,154,155]
+        nprime=[7,6,5,3,1,0,0]
 
-    '''
-    plot_all_radialKernels(l,n,lprime,nprime,radius_array,magnetic_field_s)
-    '''
+        # l=5 n=18 radial kernels:
+        l=[5,5,5,5]
+        n=[18,18,18,18]
+        lprime=[5,29,42,225]
+        nprime=[18,12,10,3]
+
+        '''
+
+    # Plot Eigenfunctions
+    plot_eigenfunctions = False
+    if plot_eigenfunctions:
+        l = 6
+        n = 2
+        # for better resolution use e.g.: r_array = np.linspace(0, 1, 5000)
+        eigenfunctions(l, n, radius_array, plot_eigenfunction=True, plot_deriv=False, plot_diff=False)
+
 
 if __name__== '__main__':
     main()

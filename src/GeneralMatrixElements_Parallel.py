@@ -54,26 +54,29 @@ def single_GME(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprim
             if (l+lprime+s+sprime) % 2 == 1:
                 return 0.0
 
-            # GME computation
+            # Load mesa_data
             radius_array = mesa_data.radius_array
             deriv_lnRho = mesa_data.deriv_lnRho
-            R1_R5_args = (l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime, deriv_lnRho)
-            R_args = (l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime)
+
+            # Compute radial kernels
+            radial_kernel_obj = radial_kernels.RadialKernels(l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime, deriv_lnRho)
+
+            # Initialize angular kernel arguments
             S_args = (lprime, l, s, sprime, mprime, m)
 
             try:
-                # H_k',k (GME):
-                general_matrix_element=1/(4*np.pi)*(radial_kernels.R1(*R1_R5_args)[0]*angular_kernels.S1(*S_args)\
-                                                        +radial_kernels.R2(*R_args)[0]*(angular_kernels.S2(*S_args)-angular_kernels.S5(*S_args))\
-                                                        -radial_kernels.R3(*R_args)[0]*(angular_kernels.S3(*S_args)+angular_kernels.S6(*S_args))\
-                                                        +radial_kernels.R4(*R_args)[0]*angular_kernels.S4(*S_args)\
-                                                        +radial_kernels.R5(*R1_R5_args)[0]*(angular_kernels.S7(*S_args)+angular_kernels.S8(*S_args))\
-                                                        +radial_kernels.R6(*R_args)[0]*(angular_kernels.S9(*S_args)-angular_kernels.S10(*S_args)+angular_kernels.S11(*S_args)\
+                # H_k',k; GME computation:
+                general_matrix_element=1/(4*np.pi)*(radial_kernel_obj.R1*angular_kernels.S1(*S_args)\
+                                                        +radial_kernel_obj.R2*(angular_kernels.S2(*S_args)-angular_kernels.S5(*S_args))\
+                                                        -radial_kernel_obj.R3*(angular_kernels.S3(*S_args)+angular_kernels.S6(*S_args))\
+                                                        +radial_kernel_obj.R4*angular_kernels.S4(*S_args)\
+                                                        +radial_kernel_obj.R5*(angular_kernels.S7(*S_args)+angular_kernels.S8(*S_args))\
+                                                        +radial_kernel_obj.R6*(angular_kernels.S9(*S_args)-angular_kernels.S10(*S_args)+angular_kernels.S11(*S_args)\
                                                         -2*angular_kernels.S13(*S_args)+angular_kernels.S14(*S_args)-angular_kernels.S15(*S_args)-angular_kernels.S16(*S_args)\
                                                         -angular_kernels.S18(*S_args)-angular_kernels.S19(*S_args)-angular_kernels.S20(*S_args)-angular_kernels.S22(*S_args)\
                                                         -angular_kernels.S23(*S_args))\
-                                                        -radial_kernels.R7(*R_args)[0]*angular_kernels.S17(*S_args)\
-                                                        -radial_kernels.R8(*R_args)[0]*angular_kernels.S21(*S_args))
+                                                        -radial_kernel_obj.R7*angular_kernels.S17(*S_args)\
+                                                        -radial_kernel_obj.R8*angular_kernels.S21(*S_args))
 
                 if general_matrix_element is None:
                     raise ValueError(f"The computed GME is None for the input parameters: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}.")
@@ -793,8 +796,8 @@ def main():
     eigen_tag = config.get("Eigenspace", "eigenspace_tag")
 
     # Omega_ref
-    l = 2
-    n = 3
+    l = 107
+    n = 10
     linthresh=1e-16
     freq = frequencies_GYRE(l, n)
     print(freq)

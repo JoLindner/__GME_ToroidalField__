@@ -350,7 +350,7 @@ def main():
             criterium_large = (128 <= l < 138 and n >= 13) or (
                     118 <= l < 128 and n >= 12) or (
                                       108 <= l < 118 and n >= 11) or (
-                                      98 <= l < 107 and n >= 10) \
+                                      98 <= l < 108 and n >= 10) \
                               or (88 <= l < 98 and n >= 9) or (
                                       79 <= l < 88 and n >= 8) or (
                                       69 <= l < 79 and n >= 7) \
