@@ -10,6 +10,7 @@ from matplotlib.colors import SymLogNorm
 from matplotlib.colors import ListedColormap
 from config import ConfigHandler
 import h5py
+import glob
 import itertools
 
 
@@ -22,7 +23,6 @@ def single_GME(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprim
     main_db_path = os.path.join(DATA_DIR, 'main_gme_results.h5')
     temp_file_name = f'temp_gme_results_{temp_name}.h5'
     temp_db_path = os.path.join(DATA_DIR, 'Temp', temp_file_name)
-
     try:
         try:
             # Check if the result already exists in the main dataset
@@ -38,59 +38,66 @@ def single_GME(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprim
             # Main database file doesn't exist yet, just continue without an error
             pass
 
-        # Create and write to temporary file
-        with h5py.File(temp_db_path, 'w') as temp_hdf:
-            # Magnetic fields
-            if magnetic_field_sprime is None:
-                magnetic_field_sprime = magnetic_field_s
-            s = magnetic_field_s.s
-            sprime = magnetic_field_sprime.s
+        # Magnetic fields
+        if magnetic_field_sprime is None:
+            magnetic_field_sprime = magnetic_field_s
+        s = magnetic_field_s.s
+        sprime = magnetic_field_sprime.s
 
-            # First selection rule
-            if m != mprime:
-                return 0.0
+        # First selection rule
+        if m != mprime:
+            return 0.0
 
-            # Second selection rule
-            if (l+lprime+s+sprime) % 2 == 1:
-                return 0.0
+        # Second selection rule
+        if (l+lprime+s+sprime) % 2 == 1:
+            return 0.0
 
-            # Load mesa_data
-            radius_array = mesa_data.radius_array
-            deriv_lnRho = mesa_data.deriv_lnRho
+        # Load mesa_data
+        radius_array = mesa_data.radius_array
+        deriv_lnRho = mesa_data.deriv_lnRho
 
-            # Compute radial kernels
-            radial_kernel_obj = radial_kernels.RadialKernels(l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime, deriv_lnRho)
+        # Compute radial kernels
+        radial_kernel_obj = radial_kernels.RadialKernels(l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime, deriv_lnRho)
 
-            # Initialize angular kernel arguments
-            S_args = (lprime, l, s, sprime, mprime, m)
+        # Compute angular kernels
+        angular_kernels_obj = angular_kernels.AngularKernels(lprime, l, s, sprime, mprime, m)
 
-            try:
-                # H_k',k; GME computation:
-                general_matrix_element=1/(4*np.pi)*(radial_kernel_obj.R1*angular_kernels.S1(*S_args)\
-                                                        +radial_kernel_obj.R2*(angular_kernels.S2(*S_args)-angular_kernels.S5(*S_args))\
-                                                        -radial_kernel_obj.R3*(angular_kernels.S3(*S_args)+angular_kernels.S6(*S_args))\
-                                                        +radial_kernel_obj.R4*angular_kernels.S4(*S_args)\
-                                                        +radial_kernel_obj.R5*(angular_kernels.S7(*S_args)+angular_kernels.S8(*S_args))\
-                                                        +radial_kernel_obj.R6*(angular_kernels.S9(*S_args)-angular_kernels.S10(*S_args)+angular_kernels.S11(*S_args)\
-                                                        -2*angular_kernels.S13(*S_args)+angular_kernels.S14(*S_args)-angular_kernels.S15(*S_args)-angular_kernels.S16(*S_args)\
-                                                        -angular_kernels.S18(*S_args)-angular_kernels.S19(*S_args)-angular_kernels.S20(*S_args)-angular_kernels.S22(*S_args)\
-                                                        -angular_kernels.S23(*S_args))\
-                                                        -radial_kernel_obj.R7*angular_kernels.S17(*S_args)\
-                                                        -radial_kernel_obj.R8*angular_kernels.S21(*S_args))
+        try:
+            # H_k',k; GME computation:
+            general_matrix_element=1/(4*np.pi)*(radial_kernel_obj.R1*angular_kernels_obj.s1
+                                            +radial_kernel_obj.R2*(angular_kernels_obj.s2-angular_kernels_obj.s5)
+                                            -radial_kernel_obj.R3*(angular_kernels_obj.s3+angular_kernels_obj.s6)
+                                            +radial_kernel_obj.R4*angular_kernels_obj.s4
+                                            +radial_kernel_obj.R5*(angular_kernels_obj.s7+angular_kernels_obj.s8)
+                                            +radial_kernel_obj.R6*(angular_kernels_obj.s9-angular_kernels_obj.s10+angular_kernels_obj.s11
+                                            -2*angular_kernels_obj.s13+angular_kernels_obj.s14-angular_kernels_obj.s15-angular_kernels_obj.s16
+                                            -angular_kernels_obj.s18-angular_kernels_obj.s19-angular_kernels_obj.s20-angular_kernels_obj.s22
+                                            -angular_kernels_obj.s23)
+                                            -radial_kernel_obj.R7*angular_kernels_obj.s17
+                                            -radial_kernel_obj.R8*angular_kernels_obj.s21)
 
-                if general_matrix_element is None:
-                    raise ValueError(f"The computed GME is None for the input parameters: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}.")
+            if general_matrix_element is None:
+                raise ValueError(f"The computed GME is None for the input parameters: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}.")
 
-            except Exception as e:
-                print(f"Failed to compute GME for the input parameters l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}. Error: {e}")
-                raise e
+        except Exception as e:
+            print(f"Failed to compute GME for the input parameters l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}. Error: {e}")
+            raise e
 
-            # Saving the computed GME to the temporary file
-            temp_hdf.create_group('gme')
-            temp_hdf.create_dataset(f'/gme/{l}_{n}_{m}_{lprime}_{nprime}_{mprime}', data=general_matrix_element)
-            print(f'Saved GME: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}, result={general_matrix_element}')
+        try:
+            # Create and write to temporary file
+            with h5py.File(temp_db_path, 'a') as temp_hdf:
+                # Saving the computed GME to the temporary file
+                if 'gme' not in temp_hdf:
+                    temp_hdf.create_group('gme')
+                dataset_path = f'/gme/{l}_{n}_{m}_{lprime}_{nprime}_{mprime}'
+                temp_hdf.create_dataset(dataset_path, data=general_matrix_element)
+                print(f'Saved GME: l={l}, n={n}, m={m}, lprime={lprime}, nprime={nprime}, mprime={mprime}, result={general_matrix_element}')
 
-            return general_matrix_element
+        except Exception as e:
+            print(f"Error during file operations: {e}")
+            raise e
+
+        return general_matrix_element
 
     except Exception as e:
         # Catch errors (e.g., programming errors, valueError)
@@ -238,7 +245,7 @@ def eigenspace_mode_search(l,n, freq_interval):
     K_space=[]
 
     for row in summary_file:
-        criterium_large=(128<=row['l']<138 and row['n_pg']>=13) or (118<=row['l']<128 and row['n_pg']>=12) or (108<=row['l']<118 and row['n_pg']>=11) or (98<=row['l']<107 and row['n_pg']>=10) \
+        criterium_large=(128<=row['l']<138 and row['n_pg']>=13) or (118<=row['l']<128 and row['n_pg']>=12) or (108<=row['l']<118 and row['n_pg']>=11) or (98<=row['l']<108 and row['n_pg']>=10) \
                   or (88 <= row['l'] < 98 and row['n_pg'] >= 9) or (79 <= row['l'] < 88 and row['n_pg'] >= 8) or (69<= row['l'] < 79 and row['n_pg'] >= 7) \
                   or (60 <= row['l'] < 69 and row['n_pg'] >= 6) or (51 <= row['l'] < 60 and row['n_pg'] >= 5) or (42 <= row['l'] < 51 and row['n_pg'] >= 4) \
                   or (31 <= row['l'] < 42 and row['n_pg'] >= 3) or (20 <= row['l'] < 31 and row['n_pg'] >= 2) or row['l']<19 and row['n_pg']>=1
@@ -370,6 +377,8 @@ def supermatrix_parallel(l, n, magnetic_field_s, magnetic_field_sprime=None, eig
                 itertools.repeat(mesa_data),
                 itertools.repeat(K_space)
             ))
+        # Merge hdf5 files
+        hdf5_merger(l, n, model_name)
 
         # Combine rows
         combined_result = np.vstack(results)
@@ -380,7 +389,91 @@ def supermatrix_parallel(l, n, magnetic_field_s, magnetic_field_sprime=None, eig
         raise e
 
 
-#INDEX MAP
+def hdf5_merger(l, n, model_name, max_retries=20, retry_interval=10):
+    # Find files matching the pattern sme_{l}_{n}_row_*.h5
+    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', model_name, 'GeneralMatrixElements')
+    main_db_path = os.path.join(DATA_DIR, 'main_gme_results.h5')
+    temp_db_path = os.path.join(DATA_DIR, 'Temp')
+
+    pattern = os.path.join(temp_db_path, f"temp_gme_results_sme_{l}_{n}_row_*.h5")
+    temp_files = glob.glob(pattern)
+
+    if not temp_files:
+        print(f"No temporary HDF5 files matching pattern {pattern} were found.")
+        return
+
+    retry_count = 0
+    while retry_count < max_retries:
+        try:
+            # Check if the main HDF5 file exists, create it if not
+            if not os.path.exists(main_db_path):
+                with h5py.File(main_db_path, 'w') as main_hdf:
+                    # Create the top-level group
+                    main_hdf.require_group('gme')
+                print(f"Created main HDF5 file: {main_db_path}")
+
+            # Open the main HDF5 file for merging
+            with h5py.File(main_db_path, 'a') as main_hdf:
+                main_group = main_hdf.require_group('gme')
+
+                # Iterate over matching temp files
+                for temp_file in temp_files:
+                    with h5py.File(temp_file, 'r') as temp_hdf:
+                        if 'gme' not in temp_hdf:
+                            raise ValueError(f"No 'gme' group found in {temp_file}.")
+
+                        temp_gme_group = temp_hdf['gme']
+                        for dataset_name in temp_gme_group:
+                            dataset_path = f'gme/{dataset_name}'
+
+                            # If the dataset doesn't exist in the main file, copy it
+                            if dataset_path not in main_hdf:
+                                data = temp_gme_group[dataset_name][...]
+                                main_group.create_dataset(dataset_name, data=data)
+                                print(f"Copied dataset {dataset_path} to main HDF5.")
+
+            # If successful, remove temp files
+            for temp_file in temp_files:
+                os.remove(temp_file)
+                print(f"Deleted temporary file: {temp_file}")
+
+            # Exit the loop after successful processing
+            break
+
+        except (OSError, BlockingIOError) as e:
+            # Handle file locking or access issues
+            retry_count += 1
+            if retry_count < max_retries:
+                print(f"Main HDF5 file locked. Retrying in {retry_interval} seconds... ({retry_count}/{max_retries})")
+                time.sleep(retry_interval)
+            else:
+                print(f"Max retries reached. Could not access {main_db_path}.")
+                raise e
+
+
+def hdf5_investigate(file_path):
+    try:
+        with h5py.File(file_path, 'r') as hdf:
+            print(f"\nInspecting HDF5 file: {file_path}")
+            print("=" * 50)
+            def print_hierarchy(name, obj):
+                indent = "  " * name.count('/')
+                if isinstance(obj, h5py.Group):
+                    print(f"{indent}Group: {name}")
+                elif isinstance(obj, h5py.Dataset):
+                    print(f"{indent}Dataset: {name} - Shape: {obj.shape}, Dtype: {obj.dtype}")
+                    # Read and preview a few data points
+                    data_preview = obj[...]
+                    if data_preview.size > 10:  # If too large, show first 10 elements
+                        data_preview = data_preview.flat[:10]
+                    print(f"{indent}  Preview: {data_preview}")
+
+            hdf.visititems(print_hierarchy)
+    except Exception as e:
+        print(f"Error reading HDF5 file: {e}")
+
+
+# INDEX MAP
 def create_index_map(l,n, K_space):
     try:
         print(f'Create index map for l={l}, n={n}')
@@ -827,19 +920,35 @@ def main():
 
     # Initialize the GME
     m=1
-    lprime=2
-    l=2
+    lprime=5
+    l=5
     n=3
     nprime=3
     mprime=1
-    gme = single_GME(l,n,m,lprime,nprime,mprime,magnetic_field_s, model_name=config.get('ModelConfig', 'model_name'), mesa_data=mesa_data)
-    print(gme)
+    #gme = single_GME(l,n,m,lprime,nprime,mprime,magnetic_field_s, model_name=config.get('ModelConfig', 'model_name'), mesa_data=mesa_data, temp_name='test')
+    #print(gme)
+
+    # Test merger:
+    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', config.get("ModelConfig", "model_name"), 'GeneralMatrixElements')
+    main_db_path = os.path.join(DATA_DIR, 'main_gme_results.h5')
+    temp_db_path = os.path.join(DATA_DIR, 'Temp')
+
+    hdf5_investigate(os.path.join(main_db_path))
+    #hdf5_investigate(os.path.join(temp_db_path, 'temp_gme_results_sme_5_2_row_0.h5'))
+
+    l=5
+    n=2
+    #hdf5_merger(l, n, config.get("ModelConfig", "model_name"), max_retries=20, retry_interval=10)
+
 
     end_time = time.time()
     elapsed_time = end_time - start_time
     print('Elapsed time: ', elapsed_time)
 
+
     #plot_supermatrix(l, n, linthresh,3)
+
+
 
 
     '''
@@ -848,11 +957,11 @@ def main():
     n_len2, n_len2_quadrat = 0,0
     n_len3,n_len3_quadrat = 0,0
     n_len_larger, n_len_larger_quadrat = 0,0
-    for l in range(0,150):
-        for n in range(0,36):
+    for l in range(0,6): # (0,150)
+        for n in range(0,15): # (0,36)
             try:
                 K_space=eigenspace_mode_search(l,n, 0.1)
-                K_space_quadrat = eigenspace(l, n, delta_freq_quadrat, eigen_tag='FirstApprox')
+                K_space_quadrat = eigenspace(l, n, delta_freq_quadrat, eigentag='FirstApprox')
                 if len(K_space)>1:
                     if len(K_space)==2:
                         n_len2+=1

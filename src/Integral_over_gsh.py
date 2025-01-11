@@ -28,6 +28,7 @@ def integral_associated_LP(l,m):
     else:
         return "Selected l is not an positive integer"
 
+
 def integral_GLP(l,N):
     #Calculates integral over genralised Legendre Polynom from -1 to 1 and with m=0
     #calculate logs to avoid overflows
@@ -37,6 +38,7 @@ def integral_GLP(l,N):
     sign = (-1)**N*integral_associated_LP(l,N)[1]
     integral = sign*np.exp(integral_abs)
     return integral
+
 
 def integral_over_3gsh(l, N, m):
     # Delta_function m1=m2+m3
@@ -93,6 +95,7 @@ def integral_over_3gsh(l, N, m):
 
     #Common factor for all terms
     return 2*np.pi*(4*np.pi)**2*ga(l[0])*ga(l[1])*ga(l[2])*result
+
 
 def integral_over_4gsh(l, N, m):
 
@@ -203,8 +206,10 @@ def integral_over_6gsh(l, N, m):
 
     return 4*np.pi*(-1.0)**(N[4]+N[5]+m[4]+m[5])*ga(l[4])*ga(l[5])*result
 
+
 def main():
     pass
+
 
 if __name__ == '__main__':
     main()

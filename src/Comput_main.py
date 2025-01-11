@@ -154,5 +154,6 @@ def main():
         calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat, magnetic_field_s, eigentag=eigentag)
     '''
 
-if __name__== '__main__':
+
+if __name__ == '__main__':
     main()

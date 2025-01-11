@@ -4,6 +4,7 @@ from GeneralMatrixElements_Parallel import frequencies_GYRE
 from GeneralMatrixElements_Parallel import load_index_map_from_file
 from config import ConfigHandler
 
+
 def quasi_degenerate(l,n, eigentag=None):
     try:
         if eigentag is None or eigentag == 'Full':
@@ -38,10 +39,12 @@ def quasi_degenerate(l,n, eigentag=None):
         print(f"An unexpected error occurred in calculating the eigenvectors and eigenvalues of the supermatrix: {e}")
         raise e
 
+
 def frequency_shifts(eigenvalues,l,n):
     omega_ref = 2*np.pi*frequencies_GYRE(l,n)
     freq_shifts = eigenvalues/(2*omega_ref*2*np.pi)*10**3 #nHz
     return freq_shifts
+
 
 def extract_indices(eigenvalues, eigenvectors,l,n, eigentag):
     try:
@@ -86,6 +89,7 @@ def extract_indices(eigenvalues, eigenvectors,l,n, eigentag):
     except Exception as e:
         print(f"An unexpected error occurred in calculating the eigenvectors and eigenvalues of the supermatrix: {e}")
         raise e
+
 
 def calculate_safe_extract_freq_shifts(l,n, eigentag=None):
     try:
@@ -149,6 +153,7 @@ def main():
     n=18
     calculate_safe_extract_freq_shifts(l,n, eigentag)
     '''
+
 
 if __name__== '__main__':
     main()
