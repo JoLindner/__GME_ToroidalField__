@@ -5,17 +5,13 @@ import os
 import pygyre as pg
 import concurrent.futures
 import time
-import matplotlib.pyplot as plt
-from matplotlib.colors import SymLogNorm
-from matplotlib.colors import ListedColormap
 from config import ConfigHandler
 import h5py
 import glob
 import itertools
 
 
-def single_GME(l,n,m,lprime,nprime,mprime,magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None, temp_name=None):
-
+def single_GME(l, n, m, lprime, nprime, mprime, magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None, temp_name=None):
     # Output directory initialization
     DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', model_name, 'GeneralMatrixElements')
 
@@ -400,7 +396,7 @@ def hdf5_merger(l, n, model_name, max_retries=20, retry_interval=10):
 
     if not temp_files:
         print(f"No temporary HDF5 files matching pattern {pattern} were found.")
-        return
+        return None
 
     retry_count = 0
     while retry_count < max_retries:
@@ -430,12 +426,12 @@ def hdf5_merger(l, n, model_name, max_retries=20, retry_interval=10):
                             if dataset_path not in main_hdf:
                                 data = temp_gme_group[dataset_name][...]
                                 main_group.create_dataset(dataset_name, data=data)
-                                print(f"Copied dataset {dataset_path} to main HDF5.")
+                                # print(f"Copied dataset {dataset_path} to main HDF5.")
 
             # If successful, remove temp files
             for temp_file in temp_files:
                 os.remove(temp_file)
-                print(f"Deleted temporary file: {temp_file}")
+                # print(f"Deleted temporary file: {temp_file}")
 
             # Exit the loop after successful processing
             break
@@ -589,500 +585,157 @@ def load_index_map_from_file(filename):
         raise e
 
 
-#SUPERMATRIX PLOTS
-def plot_supermatrix_var(l,n, linthresh):
-    #load supermatrix
-    name_string = f'supermatrix_array_{l}_{n}.txt'
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices', name_string)
-    supermatrix_array = np.loadtxt(DATA_DIR, delimiter=' ')
-    supermatrix_array = supermatrix_array.astype(float)
-
-    # Load index_map
-    name_string = f'index_map_supermatrix_array_{l}_{n}.txt'
-    data_dir = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices', name_string)
-    index_map = load_index_map_from_file(data_dir)
-
-    #linthresh = np.min(np.abs(supermatrix_array[supermatrix_array != 0]))
-    vmax = np.max(np.abs(supermatrix_array))
-    norm = SymLogNorm(vmin=-vmax, vmax=vmax, linthresh=linthresh, linscale=2)
-    fig, ax = plt.subplots(figsize=(10,9))
-    cax = ax.pcolormesh(supermatrix_array, norm=norm,  cmap='seismic', alpha=1)
-    # Add colorbar
-    cb = plt.colorbar(cax, ax=ax, label=f'Supermatrixelement in $\mu$Hz$^2$', pad=0.02)
-    cb.set_label(label=f'Supermatrixelement in $\mu$Hz$^2$',fontsize=16)
-    cb.ax.tick_params(labelsize=14)
-    #plt.xlabel('l, n')
-    #plt.ylabel('lprime, nprime')
-
-    major_ticks = []
-    minor_ticks = []
-    tickslabel = []
-    minor_tickslabel = []
-    for i in range(len(index_map[0])):
-        column=index_map[0][i]
-        minor_ticks.append(i+0.5)
-        minor_tickslabel.append(f'm={column["m"]}')
-        l=column['l']
-        if l==abs(column['m']):
-            major_ticks.append(i+0.5)
-            tickslabel.append(f'l={l}, n={column["n"]}, m={column["m"]}')
-
-
-    ax.set_xticks(major_ticks)
-    ax.set_yticks(major_ticks)
-    ax.set_xticks(minor_ticks, minor=True)
-    ax.set_yticks(minor_ticks, minor=True)
-    for minor_tick in ax.xaxis.get_minorticklocs():
-        ax.text(minor_tick, ax.get_ylim()[0] - 1, minor_tickslabel[minor_ticks.index(minor_tick)],
-                fontsize=8, color='gray', ha='center', va='top', rotation=90)
-    for minor_tick in ax.yaxis.get_minorticklocs():
-        ax.text(ax.get_xlim()[0] - 1, minor_tick, minor_tickslabel[minor_ticks.index(minor_tick)],
-                fontsize=8, color='gray', ha='center', va='top')
-
-    ax.set_xticklabels(tickslabel, rotation=90, fontsize=12)
-    ax.set_yticklabels(tickslabel, fontsize=12)
-
-    plt.title(f'Supermatrix for multiplet around l={l}, n={n}', fontsize=16)
-    plt.savefig(f'Images/Supermatrix_Pixel_Plot_l={l}_n={n}.png', dpi=300, bbox_inches='tight')
-    plt.show()
-
-
-def plot_supermatrix(l,n, linthresh, trunc=None):
-    #load supermatrix
-    name_string = f'supermatrix_array_{l}_{n}.txt'
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices', name_string)
-    supermatrix_array = np.loadtxt(DATA_DIR, delimiter=' ')
-    supermatrix_array = supermatrix_array.astype(float)
-
-    # Load index_map
-    name_string = f'index_map_supermatrix_array_{l}_{n}.txt'
-    data_dir = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices', name_string)
-    index_map = load_index_map_from_file(data_dir)
-
-    if trunc is not None:
-        index_map_l = np.unique(index_map['l'])[:-trunc]
-        mask = np.isin(index_map['l'], index_map_l) & np.isin(index_map['lprime'], index_map_l)
-        true_indices = np.argwhere(mask[0]==False)
-        index_map = np.delete(index_map, true_indices, axis=0)
-        index_map = np.delete(index_map, true_indices, axis=1)
-        supermatrix_array = np.delete(supermatrix_array, true_indices, axis=0)
-        supermatrix_array = np.delete(supermatrix_array, true_indices, axis=1)
-
-    #print elements above threshold:
-    thresh=linthresh
-    data_above=[]
-    for i in range(len(supermatrix_array)):
-        for j in range(len(supermatrix_array[i])):
-            if np.abs(supermatrix_array[i][j])>thresh:
-                data_above.append((supermatrix_array[i][j], index_map[i][j]))
-    sorted_data_above = sorted(data_above, key=lambda x: x[1][0])
-    for value, index in sorted_data_above:
-        print(value, index)
-    
-    #linthresh = np.min(np.abs(supermatrix_array[supermatrix_array != 0]))
-    #print(linthresh)
-    vmax = np.max(np.abs(supermatrix_array))
-    norm = SymLogNorm(vmin=-vmax, vmax=vmax, linthresh=linthresh, linscale=2)
-    fig, ax = plt.subplots(figsize=(16,16))
-    cax = ax.pcolormesh(supermatrix_array, norm=norm,  cmap='seismic', alpha=1)
-    # Add colorbar
-    cb = plt.colorbar(cax, ax=ax, label=f'Supermatrixelement in µHz$^2$', pad=0.02, shrink = 0.84)
-    cb.set_label(label=f'Supermatrixelement in µHz$^2$',fontsize=16)
-    cb.ax.tick_params(labelsize=14)
-    plt.title(f'Supermatrix for quasi-degenerate multiplet around l={l}, n={n}', fontsize=16)
-
-    major_ticks = []
-    minor_ticks = []
-    tickslabel_x = []
-    tickslabel_y = []
-    minor_tickslabel_x = []
-    minor_tickslabel_y = []
-    for i in range(len(index_map[0])):
-        column=index_map[0][i]
-        l_co=column['l']
-        #tick only every x-th m and m=0
-        every_x_tick=2
-        if abs(column['m']) %every_x_tick == 0:
-            minor_ticks.append(i+0.5)
-            minor_tickslabel_x.append(f'm={column["m"]}')
-            minor_tickslabel_y.append(f'm\'={column["m"]}')
-
-        if l_co==-column['m']:
-            major_ticks.append(i)
-            tickslabel_x.append(f'l={l_co}, n={column["n"]}')
-            tickslabel_y.append(f'l\'={l_co}, n\'={column["n"]}')
-        elif i==len(index_map[0])-1:
-            major_ticks.append(i+1)
-            tickslabel_x.append(f'l={l_co}, n={column["n"]}')
-            tickslabel_y.append(f'l\'={l_co}, n\'={column["n"]}')
-
-    for i in range(len(major_ticks) - 1):
-        x_mid = (major_ticks[i] + major_ticks[i + 1]) / 2
-        #displaces first label
-        if i == 0 and trunc is not None:
-            ax.text(x_mid, ax.get_ylim()[0] - 0.090 * (ax.get_ylim()[1] - ax.get_ylim()[0]), tickslabel_x[i],
-                    ha='center', va='center', fontsize=16)  # adjust factor for y position
-        else:
-            ax.text(x_mid, ax.get_ylim()[0]-0.065*(ax.get_ylim()[1]-ax.get_ylim()[0]), tickslabel_x[i], ha='center', va='center', fontsize=16) #adjust factor for y position
-
-    for i in range(len(major_ticks) - 1):
-        y_mid = (major_ticks[i] + major_ticks[i + 1]) / 2
-        if i==0 and trunc is not None:
-            ax.text(ax.get_xlim()[0] - 0.090 * (ax.get_xlim()[1] - ax.get_xlim()[0]), y_mid, tickslabel_y[i],
-                    ha='center', va='center', fontsize=16, rotation=90)  # adjust factor for y position
-        else:
-            ax.text(ax.get_xlim()[0]-0.065*(ax.get_xlim()[1]-ax.get_xlim()[0]), y_mid, tickslabel_y[i], ha='center', va='center', fontsize=16, rotation=90) #adjust factor for y position
-
-    #grid
-    for xline in major_ticks:
-        ax.vlines(xline, ymin=ax.get_ylim()[0], ymax=ax.get_ylim()[1], color='gray', linestyle='--', linewidth=1, zorder=1, alpha=0.9)
-    for yline in major_ticks:
-        ax.hlines(yline, xmin=ax.get_xlim()[0], xmax=ax.get_xlim()[1], color='gray', linestyle='--', linewidth=1, zorder=1, alpha=0.9)
-
-    ax.set_aspect(aspect='equal')
-    ax.set_xticks(major_ticks)
-    ax.set_yticks(major_ticks)
-    ax.tick_params('x', length=50)
-    ax.tick_params('y', length=50)
-    ax.set_xticks(minor_ticks, minor=True)
-    ax.set_yticks(minor_ticks, minor=True)
-
-    displacement_factor = 2
-    for minor_tick in ax.xaxis.get_minorticklocs():
-        ax.text(minor_tick, ax.get_ylim()[0] - displacement_factor, minor_tickslabel_x[minor_ticks.index(minor_tick)],
-                fontsize=8, color='gray', ha='center', va='center', rotation=90)
-    for minor_tick in ax.yaxis.get_minorticklocs():
-        ax.text(ax.get_xlim()[0] - displacement_factor, minor_tick, minor_tickslabel_y[minor_ticks.index(minor_tick)],
-                fontsize=8, color='gray', ha='center', va='center')
-
-    ax.set_xticklabels([])
-    ax.set_yticklabels([])
-
-    plt.draw()
-    plt.savefig(f'Images/Supermatrix_Pixel_Plot_l={l}_n={n}.png', dpi=300, bbox_inches='tight')
-    plt.show()
-
-
-def plot_supermatrix_l5_n12(l, n, linthresh, trunc=None):
-    # load supermatrix
-    name_string = f'supermatrix_array_{l}_{n}.txt'
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices', name_string)
-    supermatrix_array = np.loadtxt(DATA_DIR, delimiter=' ')
-    supermatrix_array = supermatrix_array.astype(float)
-
-    # Load index_map
-    name_string = f'index_map_supermatrix_array_{l}_{n}.txt'
-    data_dir = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices',
-                            name_string)
-    index_map = load_index_map_from_file(data_dir)
-
-    if trunc is not None:
-        index_map_l = np.unique(index_map['l'])[:-trunc]
-        mask = np.isin(index_map['l'], index_map_l) & np.isin(index_map['lprime'], index_map_l)
-        true_indices = np.argwhere(mask[0] == False)
-        index_map = np.delete(index_map, true_indices, axis=0)
-        index_map = np.delete(index_map, true_indices, axis=1)
-        supermatrix_array = np.delete(supermatrix_array, true_indices, axis=0)
-        supermatrix_array = np.delete(supermatrix_array, true_indices, axis=1)
-
-    # print elements above threshold:
-    thresh = linthresh
-    data_above = []
-    for i in range(len(supermatrix_array)):
-        for j in range(len(supermatrix_array[i])):
-            if np.abs(supermatrix_array[i][j]) > thresh:
-                data_above.append((supermatrix_array[i][j], index_map[i][j]))
-    sorted_data_above = sorted(data_above, key=lambda x: x[1][0])
-    for value, index in sorted_data_above:
-        print(value, index)
-
-    # linthresh = np.min(np.abs(supermatrix_array[supermatrix_array != 0]))
-    # print(linthresh)
-    vmax = np.max(np.abs(supermatrix_array))
-    #norm = SymLogNorm(vmin=-vmax, vmax=vmax, linthresh=linthresh, linscale=2)
-    fig, ax = plt.subplots(figsize=(13, 13))
-    #Slice seismic colorbar
-    seismic = plt.get_cmap("seismic")
-    red_half = seismic(np.linspace(0.5, 1, 1024))
-    red_cmap = ListedColormap(red_half)
-
-    cax = ax.pcolormesh(supermatrix_array, cmap=red_cmap, alpha=1)
-    # Add colorbar
-    cb = plt.colorbar(cax, ax=ax, label=f'Supermatrixelement in µHz$^2$', pad=0.02, shrink=0.84)
-    cb.set_label(label=f'Supermatrixelement in µHz$^2$', fontsize=16)
-    cb.ax.tick_params(labelsize=14)
-    plt.title(f'Supermatrix for quasi-degenerate multiplet around l={l}, n={n}', fontsize=16)
-
-    major_ticks = []
-    minor_ticks = []
-    tickslabel_x = []
-    tickslabel_y = []
-    minor_tickslabel_x = []
-    minor_tickslabel_y = []
-    for i in range(len(index_map[0])):
-        column = index_map[0][i]
-        l_co = column['l']
-        minor_ticks.append(i + 0.5)
-        minor_tickslabel_x.append(f'm={column["m"]}')
-        minor_tickslabel_y.append(f'm\'={column["m"]}')
-
-        if l_co == -column['m']:
-            major_ticks.append(i)
-            tickslabel_x.append(f'l={l_co}, n={column["n"]}')
-            tickslabel_y.append(f'l\'={l_co}, n\'={column["n"]}')
-        elif i == len(index_map[0]) - 1:
-            major_ticks.append(i + 1)
-            tickslabel_x.append(f'l={l_co}, n={column["n"]}')
-            tickslabel_y.append(f'l\'={l_co}, n\'={column["n"]}')
-
-    for i in range(len(major_ticks) - 1):
-        x_mid = (major_ticks[i] + major_ticks[i + 1]) / 2
-        ax.text(x_mid, ax.get_ylim()[0] - 0.075 * (ax.get_ylim()[1] - ax.get_ylim()[0]), tickslabel_x[i],
-                    ha='center', va='center', fontsize=16)  # adjust factor for y position
-
-    for i in range(len(major_ticks) - 1):
-        y_mid = (major_ticks[i] + major_ticks[i + 1]) / 2
-        ax.text(ax.get_xlim()[0] - 0.075 * (ax.get_xlim()[1] - ax.get_xlim()[0]), y_mid, tickslabel_y[i],
-                    ha='center', va='center', fontsize=16, rotation=90)  # adjust factor for y position
-
-    # grid
-    for xline in major_ticks:
-        ax.vlines(xline, ymin=ax.get_ylim()[0], ymax=ax.get_ylim()[1], color='gray', linestyle='--', linewidth=1,
-                  zorder=1, alpha=0.9)
-    for yline in major_ticks:
-        ax.hlines(yline, xmin=ax.get_xlim()[0], xmax=ax.get_xlim()[1], color='gray', linestyle='--', linewidth=1,
-                  zorder=1, alpha=0.9)
-
-    ax.set_aspect(aspect='equal')
-    ax.set_xticks(major_ticks)
-    ax.set_yticks(major_ticks)
-    ax.tick_params('x', length=50)
-    ax.tick_params('y', length=50)
-    ax.set_xticks(minor_ticks, minor=True)
-    ax.set_yticks(minor_ticks, minor=True)
-
-    displacement_factor = 0.35
-    for minor_tick in ax.xaxis.get_minorticklocs():
-        ax.text(minor_tick, ax.get_ylim()[0] - displacement_factor, minor_tickslabel_x[minor_ticks.index(minor_tick)],
-                fontsize=10, color='gray', ha='center', va='center', rotation=90)
-    for minor_tick in ax.yaxis.get_minorticklocs():
-        ax.text(ax.get_xlim()[0] - displacement_factor, minor_tick, minor_tickslabel_y[minor_ticks.index(minor_tick)],
-                fontsize=10, color='gray', ha='center', va='center')
-
-    ax.set_xticklabels([])
-    ax.set_yticklabels([])
-
-    plt.draw()
-    plt.savefig(f'Images/Supermatrix_Pixel_Plot_l={l}_n={n}_linear.png', dpi=300, bbox_inches='tight')
-    plt.show()
-
-
-#TEST AREA
 def main():
-    #start_time = time.time()
-
     # Initialize configuration handler
     config = ConfigHandler("config.ini")
 
-    #Eigenspace
+    # Initialize data directory of GME
+    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', config.get("ModelConfig", "model_name"), 'GeneralMatrixElements')
+
+    # Compare Eigenspaces
     delta_freq_quadrat = config.getfloat("Eigenspace", "delta_freq_quadrat")  #microHz^2
-    eigen_tag = config.get("Eigenspace", "eigenspace_tag")
+    compare_eigenspace = True
 
-    # Omega_ref
-    l = 107
-    n = 10
-    linthresh=1e-16
-    freq = frequencies_GYRE(l, n)
-    print(freq)
-    # Eigenspace
-    K_space_old = eigenspace(l, n, delta_freq_quadrat)
-    print('old: ',len(K_space_old), K_space_old)
+    if compare_eigenspace:
+        # reference multiplet:
+        l, n = 5, 18
+        print(f'Reference Frequency of multiplet (l={l}, n={n}): ', frequencies_GYRE(l, n), ' microHz')
+        print(f'Eigenspace width: ', delta_freq_quadrat, ' microHz^2')
+        # Eigenspace
+        K_space_full = eigenspace(l, n, delta_freq_quadrat, eigentag='Full')
+        print('Full: ', len(K_space_full), K_space_full)
 
-    K_space_1approx = eigenspace(l, n, delta_freq_quadrat, eigentag='FirstApprox')
-    print('new: ',len(K_space_1approx), K_space_1approx)
+        K_space_1approx = eigenspace(l, n, delta_freq_quadrat, eigentag='FirstApprox')
+        print('First Approx: ', len(K_space_1approx), K_space_1approx)
 
-    K_space_2approx = eigenspace(l, n, delta_freq_quadrat, 'SelfCoupling')
-    print('new: ',len(K_space_2approx), K_space_2approx)
+        K_space_selfcoupling = eigenspace(l, n, delta_freq_quadrat, 'SelfCoupling')
+        print('Only Self-Coupling: ', len(K_space_selfcoupling), K_space_selfcoupling)
 
     # Initialize stellar model (MESA data)
     mesa_data = radial_kernels.MesaData(config=config)
 
-    #magnetic field:
+    # Initialize magnetic field parameters:
     B_max = config.getfloat("MagneticFieldModel", "B_max")
     mu = config.getfloat("MagneticFieldModel", "mu")
     sigma = config.getfloat("MagneticFieldModel", "sigma")
     s = config.getint("MagneticFieldModel", "s")
+    sprime = config.getint("MagneticFieldModel", "sprime", default=s)
 
     # Initialize the magnetic field model
     magnetic_field_s = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s, radius_array=mesa_data.radius_array)
+    magnetic_field_sprime = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=sprime, radius_array=mesa_data.radius_array)
 
-    start_time = time.time()
+    # Test General Matrix Elements
+    test_gme = False
+    if test_gme:
+        # Delete old temp test files:
+        temp_path = os.path.join(DATA_DIR, 'Temp', 'temp_gme_results_test.h5')
+        if os.path.isfile(temp_path):
+            os.remove(temp_path)
 
-    # Initialize the GME
-    m=1
-    lprime=5
-    l=5
-    n=3
-    nprime=3
-    mprime=1
-    #gme = single_GME(l,n,m,lprime,nprime,mprime,magnetic_field_s, model_name=config.get('ModelConfig', 'model_name'), mesa_data=mesa_data, temp_name='test')
-    #print(gme)
+        start_time = time.time()
 
-    # Test merger:
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', config.get("ModelConfig", "model_name"), 'GeneralMatrixElements')
-    main_db_path = os.path.join(DATA_DIR, 'main_gme_results.h5')
-    temp_db_path = os.path.join(DATA_DIR, 'Temp')
+        # Compute general matrix element::
+        l, n, m = 2, 3, 1
+        lprime, nprime, mprime = 2, 3, 1
+        gme = single_GME(l,n,m,lprime,nprime,mprime,magnetic_field_s, model_name=config.get('ModelConfig', 'model_name'), mesa_data=mesa_data, temp_name='test')
+        print(f'GME for l={l}, n={n}, m={m}, l\'={lprime}, n\'={nprime}, m\'={mprime}: ', gme, f' kg^2*R_sun^3')
 
-    hdf5_investigate(os.path.join(main_db_path))
-    #hdf5_investigate(os.path.join(temp_db_path, 'temp_gme_results_sme_5_2_row_0.h5'))
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print('Elapsed time in seconds: ', elapsed_time)
 
-    l=5
-    n=2
-    #hdf5_merger(l, n, config.get("ModelConfig", "model_name"), max_retries=20, retry_interval=10)
+    # Investigate hdf5 files:
+    investigate_hdf = False
+    if investigate_hdf:
+        main_db_path = os.path.join(DATA_DIR, 'main_gme_results.h5')
+        # temp_db_path = os.path.join(DATA_DIR, 'Temp')
 
+        hdf5_investigate(os.path.join(main_db_path))
+        # hdf5_investigate(os.path.join(temp_db_path, 'temp_gme_results_sme_5_2_row_0.h5'))
 
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print('Elapsed time: ', elapsed_time)
+        # Merge hdf5 files of same reference multiplet (l, n):
+        # hdf5_merger(l=5, n=2, config.get("ModelConfig", "model_name"), max_retries=20, retry_interval=10)
 
+    # Search for modes within a given frequency interval
+    search_eigenspace = False
+    if search_eigenspace:
+        freq_interval = 0.005  # microHz
 
-    #plot_supermatrix(l, n, linthresh,3)
+        # searches for eigenspaces containing 2 or more modes in the first approximation
+        # eigenspace width is defined either by a frequency interval or delta_freq_quadrat
+        n_len2, n_len2_quadrat = 0,0
+        n_len3, n_len3_quadrat = 0,0
+        n_len_larger, n_len_larger_quadrat = 0,0
+        for l in range(2, 15):  # (0,150)
+            for n in range(0, 36):  # (0,36)
+                try:
+                    K_space = eigenspace_mode_search(l,n, freq_interval)
+                    K_space_quadrat = eigenspace(l, n, delta_freq_quadrat, eigentag='FirstApprox')
+                    if len(K_space) > 1:
+                        if len(K_space) == 2:
+                            n_len2 += 1
+                            print('K',K_space)
+                        elif len(K_space) == 3:
+                            n_len3 += 1
+                            print('K',K_space)
+                        else:
+                            n_len_larger += 1
+                            print('K',K_space)
 
+                    if len(K_space_quadrat) > 1:
+                        if len(K_space_quadrat) == 2:
+                            n_len2_quadrat += 1
+                            #print('K_qua',K_space_quadrat)
+                        elif len(K_space_quadrat) == 3:
+                            n_len3_quadrat += 1
+                            #print('K_qua',K_space_quadrat)
+                        else:
+                            n_len_larger_quadrat += 1
+                            print('K_qua',K_space_quadrat)
 
+                except:
+                    continue
+        print('Eigenspace with length 2: ',n_len2)
+        print('Eigenspace with length 3: ',n_len3)
+        print('Eigenspace with length larger 3: ',n_len_larger)
+        print('Eigenspace quadrat with length 2: ',n_len2_quadrat)
+        print('Eigenspace quadrat with length 3: ',n_len3_quadrat)
+        print('Eigenspace quadrat with length larger 3: ',n_len_larger_quadrat)
 
+    # Test Kiefer and Roth 2018 approximation
+    test_kiefer = False
+    if test_kiefer:
+        # Delete old temp test files:
+        temp_path = os.path.join(DATA_DIR, 'Temp', 'temp_gme_results_test.h5')
+        if os.path.isfile(temp_path):
+            os.remove(temp_path)
 
-    '''
-    #Eigenspace mode search
-    #searches for eigenspaces containing 2 or more modes in the first approximation, eigenspace width is defined either by a frequency interval or delta_freq_quadrat
-    n_len2, n_len2_quadrat = 0,0
-    n_len3,n_len3_quadrat = 0,0
-    n_len_larger, n_len_larger_quadrat = 0,0
-    for l in range(0,6): # (0,150)
-        for n in range(0,15): # (0,36)
-            try:
-                K_space=eigenspace_mode_search(l,n, 0.1)
-                K_space_quadrat = eigenspace(l, n, delta_freq_quadrat, eigentag='FirstApprox')
-                if len(K_space)>1:
-                    if len(K_space)==2:
-                        n_len2+=1
-                        #print('K',K_space)
-                    elif len(K_space)==3:
-                        n_len3+=1
-                        #print('K',K_space)
-                    else:
-                        n_len_larger+=1
-                        print('K',K_space)
+        l, n, m = 5, 6, 1
+        lprime, nprime, mprime = l, n, m
+        angular_freq = 2 * np.pi * frequencies_GYRE(l, n)  # microHz
 
-                if len(K_space_quadrat)>1:
-                    if len(K_space_quadrat)==2:
-                        n_len2_quadrat+=1
-                        #print('K_qua',K_space_quadrat)
-                    elif len(K_space_quadrat)==3:
-                        n_len3_quadrat+=1
-                        #print('K_qua',K_space_quadrat)
-                    else:
-                        n_len_larger_quadrat+=1
-                        print('K_qua',K_space_quadrat)
-
-            except:
-                continue
-    print('Eigenspace with length 2: ',n_len2)
-    print('Eigenspace with length 3: ',n_len3)
-    print('Eigenspace with length larger 3: ',n_len_larger)
-    print('Eigenspace quadrat with length 2: ',n_len2_quadrat)
-    print('Eigenspace quadrat with length 3: ',n_len3_quadrat)
-    print('Eigenspace quadrat with length larger 3: ',n_len_larger_quadrat)
-    '''
-
-
-
-
-    '''
-    #TEST KIEFER APPROX
-    #initialize magnetic field
-    magnetic_field_modelA = radial_kernels.MagneticField(B_max=300, mu=0.713, sigma=0.05, s=2)
-
-    m=1
-    lprime=l
-    nprime=n
-    mprime=1
-    angular_freq=2*np.pi*frequencies_GYRE(l,n)  #microHz
-    gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_modelA)
-    print(gme)
-    normal = normalization(l, n)
-    print('Normalisation =', normal, 'g*R_sun^2')
-    print(f'H_{l} {n} {m},{lprime} {nprime} {mprime} =', gme, ' kG^2*R_Sun^3')
-    print(f'H_{l} {n} {m},{lprime} {nprime} {mprime}/ normal =',
-          gme / normal * 10 ** 12 * 10 ** 6 * radial_kernels.MESA_structural_data()[3], ' microHz^2')
-    print(np.sqrt(angular_freq ** 2 + gme / normal * 10 ** 12 * 10 ** 6 * radial_kernels.MESA_structural_data()[3]), 'microHz')
-    # solution for l=lprime=2, n=5, nprime=4, m=mprime=1:  H_k,k'=-2259.118191997141 kG^2*R_Sun^3
-    approx_frequency_shift = (np.sqrt(
-        angular_freq ** 2 + gme / normal * 10 ** 12 * 10 ** 6 * radial_kernels.MESA_structural_data()[3]) - angular_freq) / (
-                                         2 * np.pi)  # microHz, after Kiefer2018
-    print(f'approx frequency shift =', approx_frequency_shift, 'microHz')
-    print(f'approx frequency shift =', approx_frequency_shift * 10 ** 3, 'nHz')
-    '''
-    '''
-    #Delta freq^2 = 30 microHz^2
-    delta_freq_quadrat = 10000  #microHz^2
-
-    #Omega_ref
-    l=5
-    n=5
-    freq=frequencies_GYRE(l,n)
-    print(freq)
-    #Eigenspace
-    K_space=eigenspace(l,n,delta_freq_quadrat)
-    print(len(K_space),K_space)
-
-    #initialize magnetic field
-    magnetic_field_modelA = radial_kernels.MagneticField(B_max=50, mu=0.7, sigma=0.04, s=2)
-
-    m=1
-    lprime=5
-    nprime=5
-    mprime=1
-    freq=frequencies_GYRE(l,n)  #microHz
-    gme = single_GM(l,n,m,lprime,nprime,mprime,magnetic_field_modelA)
-    print(gme)
-    normal = normalization(l, n)
-    print('Normalisation =', normal, 'g*R_sun^2')
-    print(f'H_{l} {n} {m},{lprime} {nprime} {mprime} =', gme, ' kG^2*R_Sun^3')
-    print(f'H_{l} {n} {m},{lprime} {nprime} {mprime}/ normal =',
-          gme / normal * 10 ** 12 * 10 ** 6 * radial_kernels.MESA_structural_data()[3], ' microHz^2')
-    print(np.sqrt(freq ** 2 + gme / normal * 10 ** 12 * 10 ** 6 * radial_kernels.MESA_structural_data()[3]), 'microHz')
-    # solution for l=lprime=2, n=5, nprime=4, m=mprime=1:  H_k,k'=-2259.118191997141 kG^2*R_Sun^3
-    approx_frequency_shift = (np.sqrt(
-        freq ** 2 + gme / normal * 10 ** 12 * 10 ** 6 * radial_kernels.MESA_structural_data()[3]) - freq) / (
-                                         2 * np.pi)  # microHz, after Kiefer2018
-    print(f'approx frequency shift =', approx_frequency_shift, 'microHz')
-    print(f'approx frequency shift =', approx_frequency_shift * 10 ** 3, 'nHz')
-    #
-
-    #Delta freq^2 = 10^4 microHz^2
-    delta_freq_quadrat = 10000 #microHz^2
-
-    #Omega_ref
-    l=5
-    n=5
-    #freq=frequencies_GYRE(l,n)
-    #Eigenspace
-    #K_space=eigenspace(l,n,delta_freq_quadrat)
-    '''
-    '''
-    #Supermatrix
-    start_time = time.time()
-    index_map=create_index_map(l,n,eigenspace(l,n,delta_freq_quadrat))
-    save_index_map_to_file(index_map, l,n)
-    #sme = supermatrix_parallel(l, n, delta_freq_quadrat, magnetic_field_modelA)
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print("Elapsed time parallel:", elapsed_time, "seconds")
-    name_string=f'supermatrix_array_{l}_{n}.txt'
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', 'Supermatrices', name_string)
-    #np.savetxt(DATA_DIR, sme, delimiter=' ')
-    '''
+        # Quasi-degenerated perturbation theory:
+        gme = single_GME(l, n, m, lprime, nprime, mprime, magnetic_field_s, magnetic_field_sprime, config.get('ModelConfig', 'model_name'), mesa_data=mesa_data, temp_name='test')
+        normal = normalization(l, n, mesa_data)
+        print('Angular frequency = ', angular_freq, ' microHz')
+        print('Normalisation = ', normal, 'g*R_sun^2')
+        print(f'H_{l} {n} {m}, {lprime} {nprime} {mprime} = ', gme, ' kG^2*R_Sun^3')
+        print(f'H_{l} {n} {m}, {lprime} {nprime} {mprime}/ normal = ',
+              gme / normal * 10 ** 12 * 10 ** 6 * mesa_data.R_sun, ' microHz^2')
+        sme = gme/normal*10**12*10**6*mesa_data.R_sun-(angular_freq**2-(2*np.pi*frequencies_GYRE(l,n))**2)
+        freq_shift_full = sme/(4*np.pi*angular_freq)
+        print('Frequency shift with only SelfCoupling and complete quasi-degenerate perturbation Theory: ', freq_shift_full * 10 ** 3, ' nHz')
+        # Kiefer and Roth 2018 approximation:
+        # They included in GME normalization factor
+        # Only SelfCoupling Terms
+        # Works fine for eigenspaces with only SelfCoupling Terms (uncertainty compared to SelfCoupling from QDPT about 10^-6 nHz)
+        print('\nKiefer and Roth 2018 approximation: ')
+        approx_frequency_shift = (np.sqrt(angular_freq ** 2 + gme / normal * 10 ** 12 * 10 ** 6 * mesa_data.R_sun)
+                                  - angular_freq) / (2 * np.pi)  # microHz, after Kiefer2018
+        print(f'approx frequency shift Kiefer for l={l}, n={n}, m={m} =', approx_frequency_shift * 10 ** 3, 'nHz')
+        print('Diff: approx - SelfCoupling QDPT = ', (freq_shift_full - approx_frequency_shift) * 10 ** 3, 'nHz')
 
 
-if __name__== '__main__':
+if __name__ == '__main__':
     main()

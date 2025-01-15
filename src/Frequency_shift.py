@@ -142,6 +142,7 @@ def calculate_safe_extract_freq_shifts(l,n, eigentag=None):
 def main():
     pass
     '''
+    # ONLY WORKS IF SUPERMATRIX_ARRAY EXISTS (check is done in quasi_degenerate() function)
     config = ConfigHandler('config.ini')
     eigentag = config.get("Eigenspace", "eigenspace_tag")
     

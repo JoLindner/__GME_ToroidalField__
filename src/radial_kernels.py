@@ -62,6 +62,7 @@ class MesaData:
             self.deriv_lnRho = Star_lastprofile.dlnRho_dr[::-1]
             self.rho_0 = np.power(10, Star_lastprofile.logRho)[::-1]  # rho_0 at outer boundary of zone in g/cm$^3$
             self.radius_array = np.power(10, Star_lastprofile.logR)[::-1]  # r/R_sun at outer boundary of zone
+            self.c_sound = Star_lastprofile.csound[::-1]  # sound speed
             # READ OUT HISTORY VARIABLES
             self.R_sun = his.rsun  # cm
 
