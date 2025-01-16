@@ -1,19 +1,22 @@
 import numpy as np
 import os
-import matplotlib.pyplot as plt
 import GeneralMatrixElements_Parallel as GMEP
-from matplotlib.ticker import ScalarFormatter
+import matplotlib.pyplot as plt
+from matplotlib.colors import SymLogNorm
+from matplotlib.colors import ListedColormap
+from config import ConfigHandler
+import pygyre as pg
+from scipy import optimize
+import scipy.interpolate
+import radial_kernels
 
 
-def plot_frequencs_shifts(l,n,plot_relative_shifts=True, plot_absolute_shifts=True, plot_combined=False):
-    try:
-        name_string = f'freq_shifts_{l}_{n}_first_approx.txt'
-        #Change this path to the path where the results are stored
-        DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output_combined', 'Frequency_shifts', name_string)
-    except (FileNotFoundError, KeyError, StopIteration) as e:
-        return f'File {DATA_DIR} does not exist'
+def plot_frequency_shifts(l, n, plot_relative_shifts=True, plot_absolute_shifts=True, plot_combined=False, path=None, save=False):
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"Frequency Shift File does not exist: {path}")
 
-    data = np.loadtxt(DATA_DIR, comments='#', delimiter=' ')
+    data = np.loadtxt(path, comments='#', delimiter=' ')
     freq_shift = data[:,0] #nHz
     m = data[:,3]
     freq = GMEP.frequencies_GYRE(l,n)*10**3   #nHz
@@ -34,7 +37,11 @@ def plot_frequencs_shifts(l,n,plot_relative_shifts=True, plot_absolute_shifts=Tr
         plt.gca().yaxis.get_offset_text().set_position((-0.05, 1))
         plt.tick_params(axis='both', which='major', labelsize=12)
         plt.title(f'Relative frequency shifts of multiplet $l={l},n={n}$', fontsize=16)
-        #plt.legend()
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, f'Relative_frequency_shifts_l{l}_n{n}.png')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
         plt.show()
 
     if plot_absolute_shifts == True:
@@ -63,6 +70,11 @@ def plot_frequencs_shifts(l,n,plot_relative_shifts=True, plot_absolute_shifts=Tr
         plt.legend(loc='upper left', fontsize=12)
         plt.tick_params(axis='both', which='major', labelsize=12)
         plt.grid(axis='y', alpha=0.5)
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, f'Absolute_frequency_shifts_l{l}_n{n}.png')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
         plt.show()
 
     if plot_combined==True:
@@ -107,33 +119,45 @@ def plot_frequencs_shifts(l,n,plot_relative_shifts=True, plot_absolute_shifts=Tr
         ax[1].grid(axis='y', alpha=0.5)
         fig.suptitle(f'l={l}, n={n}', fontsize=16)
         plt.tight_layout()
-        plt.savefig(f'Images/FrequencyShifts_l{l}_n{n}.pdf', dpi=300, bbox_inches='tight')
+        if save == True:
+            output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+            os.makedirs(output_dir, exist_ok=True)
+            DATA_DIR = os.path.join(output_dir, f'Frequency_shifts_combined_l{l}_n{n}.pdf')
+            plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
         plt.show()
 
 
-def plot_frequency_shifts_overlaid(l_list,n_list):
-    try:
-        #Change this path to the path where the results are stored
-        DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Frequency_shifts')
-    except (FileNotFoundError, KeyError, StopIteration) as e:
-        return f'File {DATA_DIR} does not exist'
+def plot_frequency_shifts_overlaid(l_list, n_list, path, eigentag, save=False):
+    name_string_list = []
+    for i in range(len(l_list)):
+        if eigentag is None or eigentag == 'Full':
+            name_string_list.append(f'freq_shifts_{l_list[i]}_{n_list[i]}_full.txt')
+        elif eigentag == 'FirstApprox':
+            name_string_list.append(f'freq_shifts_{l_list[i]}_{n_list[i]}_first_approx.txt')
+        elif eigentag == 'SelfCoupling':
+            name_string_list.append(f'freq_shifts_{l_list[i]}_{n_list[i]}_self_coupling.txt')
+        else:
+            # Raise an error if the eigen_tag is invalid
+            raise ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
 
-    name_string_list=[]
-    data_list=[]
-    freq_shift_list=[]
-    m_list=[]
-    freq_list=[]
-    relative_shift_list=[]
-    marker_list=['x','o','+']
+        file_path = os.path.join(path, name_string_list[i])
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Frequency Shift File does not exist: {file_path}")
+
+    data_list = []
+    freq_shift_list = []
+    m_list = []
+    freq_list = []
+    relative_shift_list = []
+
     plt.figure(figsize=(11, 8))
-    for value in range(len(l_list)):
-        name_string_list.append(f'freq_shifts_{l_list[value]}_{n_list[value]}.txt')
-        data_list.append(np.loadtxt(os.path.join(DATA_DIR, name_string_list[value]), comments='#', delimiter=' '))
-        freq_shift_list.append(data_list[value][:,0]) #nHz
-        m_list.append(data_list[value][:,3])
-        freq_list.append(GMEP.frequencies_GYRE(l_list[value],n_list[value])*10**3)   #nHz
-        relative_shift_list.append(freq_shift_list[value]/freq_list[value])
-        plt.scatter(m_list[value]/l_list[value],relative_shift_list[value], marker=marker_list[value], label=f'l={l_list[value]},n={n_list[value]}')
+    for i in range(len(l_list)):
+        data_list.append(np.loadtxt(os.path.join(path, name_string_list[i]), comments='#', delimiter=' '))
+        freq_shift_list.append(data_list[i][:,0])  # nHz
+        m_list.append(data_list[i][:,3])
+        freq_list.append(GMEP.frequencies_GYRE(l_list[i],n_list[i])*10**3)  # nHz
+        relative_shift_list.append(freq_shift_list[i]/freq_list[i])
+        plt.scatter(m_list[i]/l_list[i],relative_shift_list[i], label=f'l={l_list[i]}, n={n_list[i]}')
     plt.axhline(freq_list[0]/freq_list[0]-1, linestyle='--', label='unperturbed frequency', alpha=0.5)
     plt.xlabel('$m/l$', fontsize=14)
     plt.xticks([-1,-0.5,0,0.5,1])
@@ -145,243 +169,523 @@ def plot_frequency_shifts_overlaid(l_list,n_list):
     plt.gca().get_yaxis().get_major_formatter().set_useOffset(False)
     plt.gca().yaxis.get_offset_text().set_position((-0.05, 1))
     plt.tick_params(axis='both', which='major', labelsize=12)
-    plt.title(r'Relative frequency shifts of multiplet $l=5,n={5,12,18}$', fontsize=16)
-    plt.legend()
-    plt.show()
-
-def plot_approximations(l_list,n_list):
-    #load data
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', 'Frequency_shifts')
-    frequencies, frequencies_first_approx, frequencies_second_approx =[], [], []
-    for i in range(len(l_list)):
-        name_string=f'freq_shifts_{l_list[i]}_{n_list[i]}.txt'
-        frequencies.append(np.loadtxt(os.path.join(DATA_DIR, name_string), comments='#', delimiter=' '))
-        name_string=f'freq_shifts_{l_list[i]}_{n_list[i]}_first_approx.txt'
-        frequencies_first_approx.append(np.loadtxt(os.path.join(DATA_DIR, name_string), comments='#', delimiter=' '))
-        name_string=f'freq_shifts_{l_list[i]}_{n_list[i]}_second_approx.txt'
-        frequencies_second_approx.append(np.loadtxt(os.path.join(DATA_DIR, name_string), comments='#', delimiter=' '))
-
-    #calculate differences
-    diff={'diff_first_approx': [], 'diff_second_approx': []}
-    for freq, freq_a1, freq_a2 in zip(frequencies, frequencies_first_approx, frequencies_second_approx):
-        for f,f1,f2 in zip(freq, freq_a1, freq_a2):
-            diff['diff_first_approx'].append({'diff': f[0] - f1[0], 'l': f[1], 'n': f[2], 'm': f[3]})
-            diff['diff_second_approx'].append({'diff': f[0] - f2[0], 'l': f[1], 'n': f[2], 'm': f[3]})
-
-    #plot data
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 14), sharex=True)
-    unique_n = sorted(set(d['n'] for d in diff['diff_first_approx']))
-    color=['b','r','g']
-    i=0
-    rms = {'rms_first_approx': [], 'rms_second_approx': []}
-    for n in unique_n:
-        first_approx = [d for d in diff['diff_first_approx'] if d['n'] == n]
-        second_approx = [d for d in diff['diff_second_approx'] if d['n'] == n]
-        m_l_first = [d['m'] / d['l'] for d in first_approx]
-        diff_first = [d['diff'] for d in first_approx]
-
-        m_l_second = [d['m'] / d['l'] for d in second_approx]
-        diff_second = [d['diff'] for d in second_approx]
-
-        #compute RMS
-        rms['rms_first_approx'].append({'rms': np.sqrt(np.mean(np.array(diff_first) ** 2)), 'n': n})
-        rms['rms_second_approx'].append({'rms': np.sqrt(np.mean(np.array(diff_second) ** 2)), 'n': n})
-
-        if n==6:
-            ax2.scatter(m_l_first, diff_first, marker='s', color=color[i], label=f'l=5, n={int(n)} (Approx1)', alpha=1, s=100, facecolor='none', edgecolors=color[i], linewidths=2,)
-            ax1.scatter(m_l_first, diff_second, marker='o', color=color[i], label=f'l=5, n={int(n)} (Approx2)', alpha=0.75, s=100)
-            i+=1
-            continue
-        # Plot for first approximation
-        ax2.scatter(m_l_first, diff_first, marker='s', color=color[i], label=f'l=5, n={int(n)} (Approx1)', alpha=1, s=100, facecolor='none', edgecolors=color[i], linewidths=2)
-        # Plot for second approximation
-        ax2.scatter(m_l_second, diff_second, marker='o', color=color[i], label=f'l=5, n={int(n)} (Approx2)', alpha=0.75, s=100)
-        i+=1
-    ax2.set_xlabel(f'$m/l$', fontsize=14)
-    ax2.set_ylabel(r'$\delta\nu_{full}-\delta\nu_{approx}$ in nHz', fontsize=14)
-    ax1.set_ylabel(r'$\delta\nu_{full}-\delta\nu_{approx}$ in nHz', fontsize=14)
-    ax1.axhline(y=0, color='k', linestyle='--', linewidth=2, alpha=0.5)
-    ax2.axhline(y=0, color='k', linestyle='--', linewidth=2, alpha=0.5)
-    ax1.set_title(r'Differences in absolute frequency shifts of multiplets $l=5, n=\{6,12,18\}$', fontsize=16)
-    ax1.tick_params(axis='both', which='major', labelsize=12)
-    ax2.tick_params(axis='both', which='major', labelsize=12)
-    handles, labels = ax2.get_legend_handles_labels()
-    sorted_handles_labels = sorted(zip(handles, labels),key=lambda x: (x[1].endswith('(Approx2)'), x[1].endswith('(Approx1)')))
-    sorted_handles, sorted_labels = zip(*sorted_handles_labels)
-
-    ax2.legend(sorted_handles, sorted_labels, loc='upper left', fontsize=12)
-    ax1.legend(loc='upper left', fontsize=12)
+    plt.title(r'Comparison of Relative Frequency Shifts', fontsize=16)
+    ncol = min(len(l_list)+1, 5)
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), fontsize=14, ncol=ncol)
     plt.tight_layout()
-    plt.savefig(f'Images/Freq_shift_diffs.pdf', dpi=300, bbox_inches='tight')
+    if save == True:
+        output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+        os.makedirs(output_dir, exist_ok=True)
+        DATA_DIR = os.path.join(output_dir, f'Relative_frequency_shifts_overlaid_l={l_list}_n={n_list}.png')
+        plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
     plt.show()
-    print(rms['rms_first_approx'])
-    print(rms['rms_second_approx'])
 
 
-def plot_approximations_defense(l_list,n_list):
-    #load data
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', 'Frequency_shifts')
-    frequencies, frequencies_first_approx, frequencies_second_approx =[], [], []
-    for i in range(len(l_list)):
-        name_string=f'freq_shifts_{l_list[i]}_{n_list[i]}.txt'
-        frequencies.append(np.loadtxt(os.path.join(DATA_DIR, name_string), comments='#', delimiter=' '))
-        name_string=f'freq_shifts_{l_list[i]}_{n_list[i]}_first_approx.txt'
-        frequencies_first_approx.append(np.loadtxt(os.path.join(DATA_DIR, name_string), comments='#', delimiter=' '))
-        name_string=f'freq_shifts_{l_list[i]}_{n_list[i]}_second_approx.txt'
-        frequencies_second_approx.append(np.loadtxt(os.path.join(DATA_DIR, name_string), comments='#', delimiter=' '))
+def plot_output_summary(l_list, n_list, path, eigentag, lower_tp=None, r_thresh=None, save=False):
+    # Load lower turning points
+    lower_turning_points_dict = {(int(l), int(n)): r_ltp for l, n, r_ltp in lower_tp} if lower_tp is not None else {}
 
-    #calculate differences
-    diff={'diff_first_approx': [], 'diff_second_approx': []}
-    for freq, freq_a1, freq_a2 in zip(frequencies, frequencies_first_approx, frequencies_second_approx):
-        for f,f1,f2 in zip(freq, freq_a1, freq_a2):
-            diff['diff_first_approx'].append({'diff': f[0] - f1[0], 'l': f[1], 'n': f[2], 'm': f[3]})
-            diff['diff_second_approx'].append({'diff': f[0] - f2[0], 'l': f[1], 'n': f[2], 'm': f[3]})
-
-    #plot data
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8), sharex=False)
-    unique_n = sorted(set(d['n'] for d in diff['diff_first_approx']))
-    color=['b','r','g']
-    i=0
-    rms = {'rms_first_approx': [], 'rms_second_approx': []}
-    for n in unique_n:
-        first_approx = [d for d in diff['diff_first_approx'] if d['n'] == n]
-        second_approx = [d for d in diff['diff_second_approx'] if d['n'] == n]
-        m_l_first = [d['m'] / d['l'] for d in first_approx]
-        diff_first = [d['diff'] for d in first_approx]
-
-        m_l_second = [d['m'] / d['l'] for d in second_approx]
-        diff_second = [d['diff'] for d in second_approx]
-
-        #compute RMS
-        rms['rms_first_approx'].append({'rms': np.sqrt(np.mean(np.array(diff_first) ** 2)), 'n': n})
-        rms['rms_second_approx'].append({'rms': np.sqrt(np.mean(np.array(diff_second) ** 2)), 'n': n})
-
-        if n==6:
-            ax2.scatter(m_l_first, diff_first, marker='s', color=color[i], label=f'l=5, n={int(n)} (Approx1)', alpha=1, s=100, facecolor='none', edgecolors=color[i], linewidths=2,)
-            ax1.scatter(m_l_first, diff_second, marker='o', color=color[i], label=f'l=5, n={int(n)} (Approx2)', alpha=0.75, s=100)
-            i+=1
-            continue
-        # Plot for first approximation
-        ax2.scatter(m_l_first, diff_first, marker='s', color=color[i], label=f'l=5, n={int(n)} (Approx1)', alpha=1, s=100, facecolor='none', edgecolors=color[i], linewidths=2)
-        # Plot for second approximation
-        ax2.scatter(m_l_second, diff_second, marker='o', color=color[i], label=f'l=5, n={int(n)} (Approx2)', alpha=0.75, s=100)
-        i+=1
-    ax1.set_xlabel(f'$m/l$', fontsize=14)
-    ax2.set_xlabel(f'$m/l$', fontsize=14)
-    ax2.set_ylabel(r'$\delta\nu_{full}-\delta\nu_{approx}$ in nHz', fontsize=14)
-    ax1.set_ylabel(r'$\delta\nu_{full}-\delta\nu_{approx}$ in nHz', fontsize=14)
-    ax1.axhline(y=0, color='k', linestyle='--', linewidth=2, alpha=0.5)
-    ax2.axhline(y=0, color='k', linestyle='--', linewidth=2, alpha=0.5)
-    fig.suptitle(r'Differences in absolute frequency shifts of multiplets $l=5, n=\{6,12,18\}$', fontsize=16)
-    ax1.tick_params(axis='both', which='major', labelsize=12)
-    ax2.tick_params(axis='both', which='major', labelsize=12)
-    handles, labels = ax2.get_legend_handles_labels()
-    sorted_handles_labels = sorted(zip(handles, labels),key=lambda x: (x[1].endswith('(Approx2)'), x[1].endswith('(Approx1)')))
-    sorted_handles, sorted_labels = zip(*sorted_handles_labels)
-
-    ax2.legend(sorted_handles, sorted_labels, loc='lower left', fontsize=12)
-    ax1.legend(loc='upper left', fontsize=12)
-    plt.tight_layout()
-    plt.savefig(f'Images/Freq_shift_diffs_defense.pdf', dpi=300, bbox_inches='tight')
-    plt.show()
-    print(rms['rms_first_approx'])
-    print(rms['rms_second_approx'])
-
-
-def plot_output_summary(l_list, n_list):
-    #load data
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output_combined', 'Frequency_shifts')
+    # Load data
     frequency_shifts = []
     averaged_shifts = []
     for i in range(len(l_list)):
-         name_string=f'freq_shifts_{l_list[i]}_{n_list[i]}_first_approx.txt'
-         file_path = os.path.join(DATA_DIR, name_string)
-         try:
-            #print(i,l_list[i], n_list[i])
+        if eigentag is None or eigentag == 'Full':
+            name_string = f'freq_shifts_{l_list[i]}_{n_list[i]}_full.txt'
+        elif eigentag == 'FirstApprox':
+            name_string = f'freq_shifts_{l_list[i]}_{n_list[i]}_first_approx.txt'
+        elif eigentag == 'SelfCoupling':
+            name_string = f'freq_shifts_{l_list[i]}_{n_list[i]}_self_coupling.txt'
+        else:
+            # Raise an error if the eigen_tag is invalid
+            raise ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
+        file_path = os.path.join(path, name_string)
+
+        try:
             frequency_shifts.append(np.loadtxt(file_path, comments='#', delimiter=' '))
-            averaged_shifts_dict = {'l': l_list[i], 'n': n_list[i], 'freq': GMEP.frequencies_GYRE(l_list[i], n_list[i]), 'av_shift': np.mean(frequency_shifts[i][:, 0])}
+
+            rtp_value = lower_turning_points_dict.get((int(l_list[i]), int(n_list[i])), None)
+
+            averaged_shifts_dict = {
+                'l': l_list[i],
+                'n': n_list[i],
+                'freq': GMEP.frequencies_GYRE(l_list[i], n_list[i]),
+                'av_shift': np.mean(frequency_shifts[i][:, 0]),
+                'rtp': rtp_value
+            }
             averaged_shifts.append(averaged_shifts_dict)
-         except FileNotFoundError:
-             #print(f"Error: Unable to load {file_path}")
-             continue
+
+        except FileNotFoundError:
+            #print(f"Error: Unable to load {file_path}")
+            continue
 
     freq_values = [entry['freq'] for entry in averaged_shifts]
     av_shifts = [entry['av_shift'] for entry in averaged_shifts]
     l_values = [entry['l'] for entry in averaged_shifts]
+    if lower_tp is not None:
+        rtp_values = [entry['rtp'] for entry in averaged_shifts]
 
-    #plot data
+    # plot data
     plt.figure(figsize=(12, 8))
-    plt.xlabel('$\\nu$ in µHz', size=16)
+    plt.xlabel('r$_t/R_\odot$' if lower_tp is not None else '$\\nu$ in µHz', size=16)
     plt.ylabel(r'$\delta\nu$ in nHz', size=16)
-    scatter = plt.scatter(freq_values, av_shifts, c=l_values, s=5, cmap='gnuplot', alpha=0.75)
+    scatter = plt.scatter(rtp_values if lower_tp is not None else freq_values, av_shifts, c=l_values, s=5, cmap='gnuplot', alpha=0.75)
     colorbar = plt.colorbar(scatter, label='$l$')
     colorbar.set_label(label='harmonic degree $l$', size=16)
+    ticks = colorbar.get_ticks()
+    min_l, max_l = np.min(l_values), np.max(l_values)
+    ticks = [tick for tick in ticks if min_l <= tick <= max_l]
+    ticks = sorted(set(ticks + [min_l, max_l]))
+    colorbar.set_ticks(ticks)
     colorbar.ax.tick_params(labelsize=14)
 
     unique_l = np.unique(l_values)
     colors = scatter.cmap(scatter.norm(unique_l))
     for l_value, color in zip(unique_l, colors):
         subset_indices = [i for i, val in enumerate(l_values) if val == l_value]
-        plt.plot(np.array(freq_values)[subset_indices], np.array(av_shifts)[subset_indices], color=color, alpha=0.5, linewidth=1)
+        plt.plot(np.array(rtp_values if lower_tp is not None else freq_values)[subset_indices], np.array(av_shifts)[subset_indices], color=color, alpha=0.5, linewidth=1)
 
+    if lower_tp is not None and r_thresh is not None:
+        plt.axvline(r_thresh, color='black', linestyle='--', label='R$_{thresh}$'+f' = {r_thresh}')
+
+    plt.ylim(min(0, min(av_shifts)), max(av_shifts) * 1.05)
     plt.gca().tick_params(axis='both', which='major', labelsize=14)
-    plt.savefig('Images/Freq_shift_summary.pdf', dpi=300, bbox_inches='tight')
+    if save:
+        output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+        os.makedirs(output_dir, exist_ok=True)
+        if lower_tp is not None:
+            DATA_DIR = os.path.join(output_dir, f'Freq_shift_summary_lower_tp.pdf')
+        else:
+            DATA_DIR = os.path.join(output_dir, f'Freq_shift_summary.pdf')
+        plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
     plt.show()
 
-    #print(next((entry['av_shift'] for entry in averaged_shifts if entry['l'] == 5 and entry['n'] == 8)))
+
+def lower_turning_points(path_to_summary_file, mesa_data):
+    # Read in summary file
+    summary_file = pg.read_output(path_to_summary_file)
+    l_group = summary_file.group_by('l')
+
+    # Cubic Spline of sound speed
+    c_sound_spline = scipy.interpolate.CubicSpline(mesa_data.radius_array, mesa_data.c_sound,
+                                                   bc_type='natural')
+    c_sound_spline_func = lambda x: c_sound_spline(x)
+
+    # R_sun
+    R_sun = mesa_data.R_sun
+
+    # Lower turning point computation
+    results = []
+    i = 0
+    # print(optimize.root_scalar(lower_turning_point_fixed_point_func,method='secant', x0=0.5, bracket=[0,1], args=(l,n)))
+    for l in l_group['l']:
+        if l != 0:  # omit radial oscillations
+            n_pg = l_group[i]['n_pg']
+            if n_pg != 0:  # omit f modes
+                r_ltp = optimize.root_scalar(lower_turning_point_fixed_point_func, method='toms748', x0=0.5,
+                                             bracket=[0.001, 1], args=(i, l, l_group, R_sun, c_sound_spline_func))
+                results.append((int(l), int(n_pg), r_ltp.root))
+        i += 1
+    lower_tp = np.array(results, dtype=object)
+
+    return lower_tp
+
+
+def lower_turning_point_fixed_point_func(x, index, l, l_group, R_sun, c_sound_spline_func):
+    omega = 2*np.pi*l_group[index]['freq'].real*10**(-6)   # in Hz
+    return omega**2/(l*(l+1))-(c_sound_spline_func(x))**2/(x*R_sun)**2
+
+
+# SUPERMATRIX PLOTS
+def plot_supermatrix_var(l, n, linthresh):
+    # load supermatrix
+    name_string = f'supermatrix_array_{l}_{n}.txt'
+    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices', name_string)
+    supermatrix_array = np.loadtxt(DATA_DIR, delimiter=' ')
+    supermatrix_array = supermatrix_array.astype(float)
+
+    # Load index_map
+    name_string = f'index_map_supermatrix_array_{l}_{n}.txt'
+    data_dir = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices', name_string)
+    index_map = load_index_map_from_file(data_dir)
+
+    # linthresh = np.min(np.abs(supermatrix_array[supermatrix_array != 0]))
+    vmax = np.max(np.abs(supermatrix_array))
+    norm = SymLogNorm(vmin=-vmax, vmax=vmax, linthresh=linthresh, linscale=2)
+    fig, ax = plt.subplots(figsize=(10, 9))
+    cax = ax.pcolormesh(supermatrix_array, norm=norm, cmap='seismic', alpha=1)
+    # Add colorbar
+    cb = plt.colorbar(cax, ax=ax, label=f'Supermatrixelement in $\mu$Hz$^2$', pad=0.02)
+    cb.set_label(label=f'Supermatrixelement in $\mu$Hz$^2$', fontsize=16)
+    cb.ax.tick_params(labelsize=14)
+    # plt.xlabel('l, n')
+    # plt.ylabel('lprime, nprime')
+
+    major_ticks = []
+    minor_ticks = []
+    tickslabel = []
+    minor_tickslabel = []
+    for i in range(len(index_map[0])):
+        column = index_map[0][i]
+        minor_ticks.append(i + 0.5)
+        minor_tickslabel.append(f'm={column["m"]}')
+        l = column['l']
+        if l == abs(column['m']):
+            major_ticks.append(i + 0.5)
+            tickslabel.append(f'l={l}, n={column["n"]}, m={column["m"]}')
+
+    ax.set_xticks(major_ticks)
+    ax.set_yticks(major_ticks)
+    ax.set_xticks(minor_ticks, minor=True)
+    ax.set_yticks(minor_ticks, minor=True)
+    for minor_tick in ax.xaxis.get_minorticklocs():
+        ax.text(minor_tick, ax.get_ylim()[0] - 1, minor_tickslabel[minor_ticks.index(minor_tick)],
+                fontsize=8, color='gray', ha='center', va='top', rotation=90)
+    for minor_tick in ax.yaxis.get_minorticklocs():
+        ax.text(ax.get_xlim()[0] - 1, minor_tick, minor_tickslabel[minor_ticks.index(minor_tick)],
+                fontsize=8, color='gray', ha='center', va='top')
+
+    ax.set_xticklabels(tickslabel, rotation=90, fontsize=12)
+    ax.set_yticklabels(tickslabel, fontsize=12)
+
+    plt.title(f'Supermatrix for multiplet around l={l}, n={n}', fontsize=16)
+    plt.savefig(f'Images/Supermatrix_Pixel_Plot_l={l}_n={n}.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+
+def plot_supermatrix(l, n, linthresh, trunc=None):
+    # load supermatrix
+    name_string = f'supermatrix_array_{l}_{n}.txt'
+    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices', name_string)
+    supermatrix_array = np.loadtxt(DATA_DIR, delimiter=' ')
+    supermatrix_array = supermatrix_array.astype(float)
+
+    # Load index_map
+    name_string = f'index_map_supermatrix_array_{l}_{n}.txt'
+    data_dir = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices', name_string)
+    index_map = load_index_map_from_file(data_dir)
+
+    if trunc is not None:
+        index_map_l = np.unique(index_map['l'])[:-trunc]
+        mask = np.isin(index_map['l'], index_map_l) & np.isin(index_map['lprime'], index_map_l)
+        true_indices = np.argwhere(mask[0] == False)
+        index_map = np.delete(index_map, true_indices, axis=0)
+        index_map = np.delete(index_map, true_indices, axis=1)
+        supermatrix_array = np.delete(supermatrix_array, true_indices, axis=0)
+        supermatrix_array = np.delete(supermatrix_array, true_indices, axis=1)
+
+    # print elements above threshold:
+    thresh = linthresh
+    data_above = []
+    for i in range(len(supermatrix_array)):
+        for j in range(len(supermatrix_array[i])):
+            if np.abs(supermatrix_array[i][j]) > thresh:
+                data_above.append((supermatrix_array[i][j], index_map[i][j]))
+    sorted_data_above = sorted(data_above, key=lambda x: x[1][0])
+    for value, index in sorted_data_above:
+        print(value, index)
+
+    # linthresh = np.min(np.abs(supermatrix_array[supermatrix_array != 0]))
+    # print(linthresh)
+    vmax = np.max(np.abs(supermatrix_array))
+    norm = SymLogNorm(vmin=-vmax, vmax=vmax, linthresh=linthresh, linscale=2)
+    fig, ax = plt.subplots(figsize=(16, 16))
+    cax = ax.pcolormesh(supermatrix_array, norm=norm, cmap='seismic', alpha=1)
+    # Add colorbar
+    cb = plt.colorbar(cax, ax=ax, label=f'Supermatrixelement in µHz$^2$', pad=0.02, shrink=0.84)
+    cb.set_label(label=f'Supermatrixelement in µHz$^2$', fontsize=16)
+    cb.ax.tick_params(labelsize=14)
+    plt.title(f'Supermatrix for quasi-degenerate multiplet around l={l}, n={n}', fontsize=16)
+
+    major_ticks = []
+    minor_ticks = []
+    tickslabel_x = []
+    tickslabel_y = []
+    minor_tickslabel_x = []
+    minor_tickslabel_y = []
+    for i in range(len(index_map[0])):
+        column = index_map[0][i]
+        l_co = column['l']
+        # tick only every x-th m and m=0
+        every_x_tick = 2
+        if abs(column['m']) % every_x_tick == 0:
+            minor_ticks.append(i + 0.5)
+            minor_tickslabel_x.append(f'm={column["m"]}')
+            minor_tickslabel_y.append(f'm\'={column["m"]}')
+
+        if l_co == -column['m']:
+            major_ticks.append(i)
+            tickslabel_x.append(f'l={l_co}, n={column["n"]}')
+            tickslabel_y.append(f'l\'={l_co}, n\'={column["n"]}')
+        elif i == len(index_map[0]) - 1:
+            major_ticks.append(i + 1)
+            tickslabel_x.append(f'l={l_co}, n={column["n"]}')
+            tickslabel_y.append(f'l\'={l_co}, n\'={column["n"]}')
+
+    for i in range(len(major_ticks) - 1):
+        x_mid = (major_ticks[i] + major_ticks[i + 1]) / 2
+        # displaces first label
+        if i == 0 and trunc is not None:
+            ax.text(x_mid, ax.get_ylim()[0] - 0.090 * (ax.get_ylim()[1] - ax.get_ylim()[0]), tickslabel_x[i],
+                    ha='center', va='center', fontsize=16)  # adjust factor for y position
+        else:
+            ax.text(x_mid, ax.get_ylim()[0] - 0.065 * (ax.get_ylim()[1] - ax.get_ylim()[0]), tickslabel_x[i],
+                    ha='center', va='center', fontsize=16)  # adjust factor for y position
+
+    for i in range(len(major_ticks) - 1):
+        y_mid = (major_ticks[i] + major_ticks[i + 1]) / 2
+        if i == 0 and trunc is not None:
+            ax.text(ax.get_xlim()[0] - 0.090 * (ax.get_xlim()[1] - ax.get_xlim()[0]), y_mid, tickslabel_y[i],
+                    ha='center', va='center', fontsize=16, rotation=90)  # adjust factor for y position
+        else:
+            ax.text(ax.get_xlim()[0] - 0.065 * (ax.get_xlim()[1] - ax.get_xlim()[0]), y_mid, tickslabel_y[i],
+                    ha='center', va='center', fontsize=16, rotation=90)  # adjust factor for y position
+
+    # grid
+    for xline in major_ticks:
+        ax.vlines(xline, ymin=ax.get_ylim()[0], ymax=ax.get_ylim()[1], color='gray', linestyle='--', linewidth=1,
+                  zorder=1, alpha=0.9)
+    for yline in major_ticks:
+        ax.hlines(yline, xmin=ax.get_xlim()[0], xmax=ax.get_xlim()[1], color='gray', linestyle='--', linewidth=1,
+                  zorder=1, alpha=0.9)
+
+    ax.set_aspect(aspect='equal')
+    ax.set_xticks(major_ticks)
+    ax.set_yticks(major_ticks)
+    ax.tick_params('x', length=50)
+    ax.tick_params('y', length=50)
+    ax.set_xticks(minor_ticks, minor=True)
+    ax.set_yticks(minor_ticks, minor=True)
+
+    displacement_factor = 2
+    for minor_tick in ax.xaxis.get_minorticklocs():
+        ax.text(minor_tick, ax.get_ylim()[0] - displacement_factor, minor_tickslabel_x[minor_ticks.index(minor_tick)],
+                fontsize=8, color='gray', ha='center', va='center', rotation=90)
+    for minor_tick in ax.yaxis.get_minorticklocs():
+        ax.text(ax.get_xlim()[0] - displacement_factor, minor_tick, minor_tickslabel_y[minor_ticks.index(minor_tick)],
+                fontsize=8, color='gray', ha='center', va='center')
+
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+
+    plt.draw()
+    plt.savefig(f'Images/Supermatrix_Pixel_Plot_l={l}_n={n}.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+
+def plot_supermatrix_l5_n12(l, n, linthresh, trunc=None):
+    # load supermatrix
+    name_string = f'supermatrix_array_{l}_{n}.txt'
+    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices', name_string)
+    supermatrix_array = np.loadtxt(DATA_DIR, delimiter=' ')
+    supermatrix_array = supermatrix_array.astype(float)
+
+    # Load index_map
+    name_string = f'index_map_supermatrix_array_{l}_{n}.txt'
+    data_dir = os.path.join(os.path.dirname(__file__), 'Output_1708_first_run_part3', 'Supermatrices',
+                            name_string)
+    index_map = load_index_map_from_file(data_dir)
+
+    if trunc is not None:
+        index_map_l = np.unique(index_map['l'])[:-trunc]
+        mask = np.isin(index_map['l'], index_map_l) & np.isin(index_map['lprime'], index_map_l)
+        true_indices = np.argwhere(mask[0] == False)
+        index_map = np.delete(index_map, true_indices, axis=0)
+        index_map = np.delete(index_map, true_indices, axis=1)
+        supermatrix_array = np.delete(supermatrix_array, true_indices, axis=0)
+        supermatrix_array = np.delete(supermatrix_array, true_indices, axis=1)
+
+    # print elements above threshold:
+    thresh = linthresh
+    data_above = []
+    for i in range(len(supermatrix_array)):
+        for j in range(len(supermatrix_array[i])):
+            if np.abs(supermatrix_array[i][j]) > thresh:
+                data_above.append((supermatrix_array[i][j], index_map[i][j]))
+    sorted_data_above = sorted(data_above, key=lambda x: x[1][0])
+    for value, index in sorted_data_above:
+        print(value, index)
+
+    # linthresh = np.min(np.abs(supermatrix_array[supermatrix_array != 0]))
+    # print(linthresh)
+    vmax = np.max(np.abs(supermatrix_array))
+    # norm = SymLogNorm(vmin=-vmax, vmax=vmax, linthresh=linthresh, linscale=2)
+    fig, ax = plt.subplots(figsize=(13, 13))
+    # Slice seismic colorbar
+    seismic = plt.get_cmap("seismic")
+    red_half = seismic(np.linspace(0.5, 1, 1024))
+    red_cmap = ListedColormap(red_half)
+
+    cax = ax.pcolormesh(supermatrix_array, cmap=red_cmap, alpha=1)
+    # Add colorbar
+    cb = plt.colorbar(cax, ax=ax, label=f'Supermatrixelement in µHz$^2$', pad=0.02, shrink=0.84)
+    cb.set_label(label=f'Supermatrixelement in µHz$^2$', fontsize=16)
+    cb.ax.tick_params(labelsize=14)
+    plt.title(f'Supermatrix for quasi-degenerate multiplet around l={l}, n={n}', fontsize=16)
+
+    major_ticks = []
+    minor_ticks = []
+    tickslabel_x = []
+    tickslabel_y = []
+    minor_tickslabel_x = []
+    minor_tickslabel_y = []
+    for i in range(len(index_map[0])):
+        column = index_map[0][i]
+        l_co = column['l']
+        minor_ticks.append(i + 0.5)
+        minor_tickslabel_x.append(f'm={column["m"]}')
+        minor_tickslabel_y.append(f'm\'={column["m"]}')
+
+        if l_co == -column['m']:
+            major_ticks.append(i)
+            tickslabel_x.append(f'l={l_co}, n={column["n"]}')
+            tickslabel_y.append(f'l\'={l_co}, n\'={column["n"]}')
+        elif i == len(index_map[0]) - 1:
+            major_ticks.append(i + 1)
+            tickslabel_x.append(f'l={l_co}, n={column["n"]}')
+            tickslabel_y.append(f'l\'={l_co}, n\'={column["n"]}')
+
+    for i in range(len(major_ticks) - 1):
+        x_mid = (major_ticks[i] + major_ticks[i + 1]) / 2
+        ax.text(x_mid, ax.get_ylim()[0] - 0.075 * (ax.get_ylim()[1] - ax.get_ylim()[0]), tickslabel_x[i],
+                ha='center', va='center', fontsize=16)  # adjust factor for y position
+
+    for i in range(len(major_ticks) - 1):
+        y_mid = (major_ticks[i] + major_ticks[i + 1]) / 2
+        ax.text(ax.get_xlim()[0] - 0.075 * (ax.get_xlim()[1] - ax.get_xlim()[0]), y_mid, tickslabel_y[i],
+                ha='center', va='center', fontsize=16, rotation=90)  # adjust factor for y position
+
+    # grid
+    for xline in major_ticks:
+        ax.vlines(xline, ymin=ax.get_ylim()[0], ymax=ax.get_ylim()[1], color='gray', linestyle='--', linewidth=1,
+                  zorder=1, alpha=0.9)
+    for yline in major_ticks:
+        ax.hlines(yline, xmin=ax.get_xlim()[0], xmax=ax.get_xlim()[1], color='gray', linestyle='--', linewidth=1,
+                  zorder=1, alpha=0.9)
+
+    ax.set_aspect(aspect='equal')
+    ax.set_xticks(major_ticks)
+    ax.set_yticks(major_ticks)
+    ax.tick_params('x', length=50)
+    ax.tick_params('y', length=50)
+    ax.set_xticks(minor_ticks, minor=True)
+    ax.set_yticks(minor_ticks, minor=True)
+
+    displacement_factor = 0.35
+    for minor_tick in ax.xaxis.get_minorticklocs():
+        ax.text(minor_tick, ax.get_ylim()[0] - displacement_factor, minor_tickslabel_x[minor_ticks.index(minor_tick)],
+                fontsize=10, color='gray', ha='center', va='center', rotation=90)
+    for minor_tick in ax.yaxis.get_minorticklocs():
+        ax.text(ax.get_xlim()[0] - displacement_factor, minor_tick, minor_tickslabel_y[minor_ticks.index(minor_tick)],
+                fontsize=10, color='gray', ha='center', va='center')
+
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+
+    plt.draw()
+    plt.savefig(f'Images/Supermatrix_Pixel_Plot_l={l}_n={n}_linear.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+
 
 def main():
-    l=[5,5,5]
-    n=[6,12,18]
-    #plot_frequency_shifts_overlaid(l,n)
-    #plot_approximations_defense(l,n)
+    # Initialize configuration handler
+    config = ConfigHandler("config.ini")
 
-    #l=70
-    #n=8
-    #plot_frequencs_shifts(l,n, True, False, False)
+    # Initialize path to Frequency_shifts folder
+    freq_dir = os.path.join(os.path.dirname(__file__), 'Output', config.get("ModelConfig", "model_name"), 'FrequencyShifts')
 
-    #Plot output summary
-    #Create tuple list of l and n
-    l_list, n_list = [], []
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output_combined', 'Frequency_shifts')
+    ######################################
+    # Plot frequency shifts
+    plot_freq_shifts = False
 
-    for l in range(2,140+1):
-        for n in range(0, 35+1):
-            criterium_large = (128 <= l < 138 and n >= 13) or (
-                    118 <= l < 128 and n >= 12) or (
-                                      108 <= l < 118 and n >= 11) or (
-                                      98 <= l < 108 and n >= 10) \
-                              or (88 <= l < 98 and n >= 9) or (
-                                      79 <= l < 88 and n >= 8) or (
-                                      69 <= l < 79 and n >= 7) \
-                              or (60 <= l < 69 and n >= 6) or (
-                                      51 <= l < 60 and n >= 5) or (
-                                      42 <= l < 51 and n >= 4) \
-                              or (31 <= l < 42 and n >= 3) or (
-                                      20 <= l < 31 and n >= 2) or l <= 19 and n >= 1
-            freq_temp = GMEP.frequencies_GYRE(l,n)
-            name_string = f'freq_shifts_{l}_{n}_first_approx.txt'
-            file_path = os.path.join(DATA_DIR, name_string)
+    # Define Parameters; change this as needed
+    rel_shifts = True   # Use this for rel. freq shift over m/l
+    abs_shifts = False   # Only useful for low l
+    combined = False     # Only useful for low l
+    l, n = 5, 6
+    save = False
 
-            if freq_temp is not None and criterium_large and os.path.exists(file_path):
-                l_list.append(l)
-                n_list.append(n)
+    # Load eigentag
+    eigentag = config.get("Eigenspace", "eigenspace_tag")
+    if eigentag is None or eigentag == 'Full':
+        name_string = f'freq_shifts_{l}_{n}_full.txt'
+    elif eigentag == 'FirstApprox':
+        name_string = f'freq_shifts_{l}_{n}_first_approx.txt'
+    elif eigentag == 'SelfCoupling':
+        name_string = f'freq_shifts_{l}_{n}_self_coupling.txt'
+    else:
+        # Raise an error if the eigen_tag is invalid
+        raise ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
+    # As default use name with eigentag from config, but the file_name can be changed as needed
+    file_name = name_string
 
-    plot_output_summary(l_list, n_list)
+    if plot_freq_shifts:
+        # Path can be adjusted as needed; default is Output/model_name/FrequencyShifts
+        path = os.path.join(freq_dir, file_name)
+        plot_frequency_shifts(l, n, plot_relative_shifts=rel_shifts, plot_absolute_shifts=abs_shifts, plot_combined=combined, path=path, save=save)
 
+    ######################################
+    # Plot overlaid frequency shifts
+    plot_overlaid = True
+    l, n = [], []
+    for i in range(2,60):
+        l.append(i)
+        n.append(10)
+    #l = [5, 6, 7, 8, 9, 10]
+    #n = [5, 5, 5, 5, 5, 5]
+    save = False
+    if plot_overlaid:
+        plot_frequency_shifts_overlaid(l, n, freq_dir, eigentag, save)
 
-    '''
-    l=5
-    n=6
-    plot_frequencs_shifts(l,n, False, False, True)
-    l = 5
-    n = 18
-    plot_frequencs_shifts(l,n, False, False, True)
+    ######################################
+    # Plot output summary: Plots frequency shift over multiplet frequency or lower turning point (if given)
+    output_summary = False
+    comp_rt = False
+    r_thresh = 0.863
+    save = True
 
-    l = 5
-    n = 12
-    plot_frequencs_shifts(l,n, False, False, True)
-    '''
+    # Compute lower turning points
+    # Initialize stellar model (MESA data)
+    mesa_data = radial_kernels.MesaData(config=config)
+    summary_dir = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE', config.get("StellarModel", "summary_GYRE_path"))
+    if comp_rt:
+        r_t = lower_turning_points(summary_dir, mesa_data)
+    else:
+        r_t = None
+
+    if output_summary:
+        # Create tuple list of l and n
+        l_list, n_list = [], []
+        for l in range(2, 140+1):
+            for n in range(0, 35+1):
+                criterium_large = (128 <= l < 138 and n >= 13) or (
+                        118 <= l < 128 and n >= 12) or (
+                                          108 <= l < 118 and n >= 11) or (
+                                          98 <= l < 108 and n >= 10) \
+                                  or (88 <= l < 98 and n >= 9) or (
+                                          79 <= l < 88 and n >= 8) or (
+                                          69 <= l < 79 and n >= 7) \
+                                  or (60 <= l < 69 and n >= 6) or (
+                                          51 <= l < 60 and n >= 5) or (
+                                          42 <= l < 51 and n >= 4) \
+                                  or (31 <= l < 42 and n >= 3) or (
+                                          20 <= l < 31 and n >= 2) or l <= 19 and n >= 1
+                freq_temp = GMEP.frequencies_GYRE(l,n)
+                if eigentag is None or eigentag == 'Full':
+                    name_string = f'freq_shifts_{l}_{n}_full.txt'
+                elif eigentag == 'FirstApprox':
+                    name_string = f'freq_shifts_{l}_{n}_first_approx.txt'
+                elif eigentag == 'SelfCoupling':
+                    name_string = f'freq_shifts_{l}_{n}_self_coupling.txt'
+                else:
+                    # Raise an error if the eigen_tag is invalid
+                    raise ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
+                file_path = os.path.join(freq_dir, name_string)
+                if freq_temp is not None and criterium_large and os.path.exists(file_path):
+                    l_list.append(l)
+                    n_list.append(n)
+        plot_output_summary(l_list, n_list, freq_dir, eigentag, r_t, r_thresh, save)
+
 
 if __name__ == "__main__":
     main()
