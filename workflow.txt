@@ -1,0 +1,23 @@
+1. Create mesa_model: 
+
+      save_pulse_data_when_terminate = .TRUE.
+      save_pulse_data_filename = 'stellar_name.mesa'
+
+      MESA profile Output:
+	- dlnRho_dr
+	- logRho
+	- logR
+
+      MESA history Output:
+	- rsun
+
+- store LOG folder in Data/Stellar_model
+
+2. Compute modes with GYRE:
+
+	&model
+  		model_type = 'EVOL'  ! Obtain stellar structure from an evolutionary model
+  		file = 'stellar_name.mesa'    ! File name of the evolutionary model
+  		file_format = 'MESA' ! File format of the evolutionary model
+
+- store summary and detail files in Data/GYRE
