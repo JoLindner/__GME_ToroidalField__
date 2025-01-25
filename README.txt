@@ -2,6 +2,8 @@
 Lindner and Roth 2025: "A Revised Expression for the General Matrix Element of the Direct Effect of a Toroidal Magnetic Field on Stellar Oscillations"
 (in Progress)
 
+- For any bugs, problems or questions: Please don't hesitate and contact me under: jlindner@tls-tautenburg.de
+
 
 - In database all GMEs are indexed by (l,n,m,lprime,nprime,mprime) and only non-zero GMEs are stored, i.e. modes couple only (and have a non-zero GME) if both selection rules are satisfied.
 

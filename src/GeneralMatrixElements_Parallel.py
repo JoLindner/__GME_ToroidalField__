@@ -9,6 +9,8 @@ from config import ConfigHandler
 import h5py
 import glob
 import itertools
+from scipy import optimize
+import scipy.interpolate
 
 
 def single_GME(l, n, m, lprime, nprime, mprime, magnetic_field_s, magnetic_field_sprime=None, model_name=None, mesa_data=None, temp_name=None):
@@ -147,7 +149,7 @@ def frequencies_GYRE(l,n):
     return filterd_freq  #microHz
 
 
-def eigenspace(l,n, delta_freq_quadrat, eigentag=None):
+def eigenspace(l, n, delta_freq_quadrat, eigentag=None, first_approx_data=None):
     try:
         # TAGS: Default/Full: full eigenspace; FirstApprox: first approximation; SelfCoupling: Only self-coupling (second Approximation)
 
@@ -174,32 +176,16 @@ def eigenspace(l,n, delta_freq_quadrat, eigentag=None):
                         'l': row['l']}
                     K_space.append(new_row)
 
-        elif eigentag == 'FirstApprox':
+        elif eigentag == 'FirstApprox' and first_approx_data is not None:
             # Apply first approximation
-            # Note: WORKS only for Sun and MagneticFieldModel at the base of the convection zone (B_max = 300, mu = 0.713, sigma = 0.05, s = 2)
-            for row in summary_file:
-                criterium_large = (128 <= row['l'] < 138 and row['n_pg'] >= 13) or (
-                            118 <= row['l'] < 128 and row['n_pg'] >= 12) or (
-                                              108 <= row['l'] < 118 and row['n_pg'] >= 11) or (
-                                              98 <= row['l'] < 108 and row['n_pg'] >= 10) \
-                                  or (88 <= row['l'] < 98 and row['n_pg'] >= 9) or (
-                                              79 <= row['l'] < 88 and row['n_pg'] >= 8) or (
-                                              69 <= row['l'] < 79 and row['n_pg'] >= 7) \
-                                  or (60 <= row['l'] < 69 and row['n_pg'] >= 6) or (
-                                              51 <= row['l'] < 60 and row['n_pg'] >= 5) or (
-                                              42 <= row['l'] < 51 and row['n_pg'] >= 4) \
-                                  or (31 <= row['l'] < 42 and row['n_pg'] >= 3) or (
-                                              20 <= row['l'] < 31 and row['n_pg'] >= 2) or row['l'] <= 19 and row[
-                                      'n_pg'] >= 1
-                #criterium_small = row['l'] < 138
-
-                if abs(row['freq'].real ** 2 - freq_ref ** 2) <= delta_freq_quadrat and row['l'] > 1:
-                    if criterium_large:
-                        new_row = {
-                            'freq': row['freq'],
-                            'n': row['n_pg'],
-                            'l': row['l']}
-                        K_space.append(new_row)
+            for (l, n), multiplet in first_approx_data['multiplets'].items():
+                if abs(multiplet['freq'] ** 2 - freq_ref ** 2) <= delta_freq_quadrat:
+                    new_row = {
+                        'freq': multiplet['freq'],
+                        'n': n,
+                        'l': l
+                    }
+                    K_space.append(new_row)
 
         elif eigentag == 'SelfCoupling':
             # Only self-coupling (second approximation)
@@ -225,33 +211,23 @@ def eigenspace(l,n, delta_freq_quadrat, eigentag=None):
         raise
 
 
-def eigenspace_mode_search(l,n, freq_interval):
-    #Search quasi-degenerate multiplets with frequencies closer than 0.1 microHz to the reference multiplet
-
-    #doesnt matter here if I calculate the eigenspaces from the frequencies insteat of angular frequencies
-    freq_ref = frequencies_GYRE(l,n)
+def eigenspace_mode_search(l, n, freq_interval, first_approx_data=None):
+    # Search quasi-degenerate multiplets with frequencies closer than 0.1 microHz to the reference multiplet
+    # Doesn't matter here if I calculate the eigenspaces from the frequencies insteat of angular frequencies
+    freq_ref = frequencies_GYRE(l, n)
 
     # Initialize configuration handler
     config = ConfigHandler()
 
-    # Read path to summary file
-    summary_GYRE_path = config.get("StellarModel", "summary_GYRE_path")
-    DATA_DIR = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE', summary_GYRE_path)
-    summary_file = pg.read_output(DATA_DIR)
-    K_space=[]
-
-    for row in summary_file:
-        criterium_large=(128<=row['l']<138 and row['n_pg']>=13) or (118<=row['l']<128 and row['n_pg']>=12) or (108<=row['l']<118 and row['n_pg']>=11) or (98<=row['l']<108 and row['n_pg']>=10) \
-                  or (88 <= row['l'] < 98 and row['n_pg'] >= 9) or (79 <= row['l'] < 88 and row['n_pg'] >= 8) or (69<= row['l'] < 79 and row['n_pg'] >= 7) \
-                  or (60 <= row['l'] < 69 and row['n_pg'] >= 6) or (51 <= row['l'] < 60 and row['n_pg'] >= 5) or (42 <= row['l'] < 51 and row['n_pg'] >= 4) \
-                  or (31 <= row['l'] < 42 and row['n_pg'] >= 3) or (20 <= row['l'] < 31 and row['n_pg'] >= 2) or row['l']<19 and row['n_pg']>=1
-        if abs(row['freq'].real-freq_ref) <= freq_interval:
-            if criterium_large==True:
-                new_row = {
-                    'freq': row['freq'],
-                    'n': row['n_pg'],
-                    'l': row['l']}
-                K_space.append(new_row)
+    # Create eigenspace
+    K_space = []
+    for (l, n), multiplet in first_approx_data['multiplets'].items():
+        if abs(multiplet['freq'] - freq_ref) <= freq_interval:
+            new_row = {
+                'freq': multiplet['freq'],
+                'n': n,
+                'l': l}
+            K_space.append(new_row)
 
     return K_space
 
@@ -585,31 +561,71 @@ def load_index_map_from_file(filename):
         raise e
 
 
+def first_approx(ltp, magnetic_field_s):
+    # Checks for all multiplets in GYRE summary file with l>=2 and n>=0
+    # Returns filtered list of multiplets with l>=2 and n>=0 within 3 sigma effective magnetic field range and threshhold radius
+
+    # Compute 3sigma range of magnetic field:
+    r_thresh = magnetic_field_s.mu + 3 * magnetic_field_s.sigma
+    #print('Upper bound of 3 sigma effective magnetic field range: ', r_thresh, r'R_sun')
+
+    # Filter out multiplets which do not penetrate into effective magnetic field range and skip l=1 (l=0 is not in r_ltp)
+    multiplets_first_approx = {
+        'multiplets': {
+            (l, n): {'r_ltp': data['r_ltp'], 'freq': data['frequency']}
+            for (l, n), data in ltp.items()
+            if l != 1 and data['r_ltp'] <= r_thresh
+        },
+        'r_thresh': r_thresh
+    }
+
+    return multiplets_first_approx
+
+
+def lower_turning_points(path_to_summary_file, mesa_data):
+    # Read in summary file
+    summary_file = pg.read_output(path_to_summary_file)
+    l_group = summary_file.group_by('l')
+
+    # Cubic Spline of sound speed
+    c_sound_spline = scipy.interpolate.CubicSpline(mesa_data.radius_array, mesa_data.c_sound,
+                                                   bc_type='natural')
+    c_sound_spline_func = lambda x: c_sound_spline(x)
+
+    # R_sun
+    R_sun = mesa_data.R_sun
+
+    # Lower turning point computation
+    lower_tp = {}
+    i = 0
+    # print(optimize.root_scalar(lower_turning_point_fixed_point_func,method='secant', x0=0.5, bracket=[0,1], args=(l,n)))
+    for l in l_group['l']:
+        if l != 0:  # omit radial oscillations
+            n_pg = l_group[i]['n_pg']
+            if n_pg != 0:  # omit f modes
+                r_ltp = optimize.root_scalar(lower_turning_point_fixed_point_func, method='toms748', x0=0.5,
+                                             bracket=[0.001, 1], args=(i, l, l_group, R_sun, c_sound_spline_func))
+                frequency = l_group[i]['freq']  # in microHz
+                lower_tp[(int(l), int(n_pg))] = {
+                    'r_ltp': r_ltp.root,
+                    'frequency': frequency.real
+                }
+        i += 1
+
+    return lower_tp
+
+
+def lower_turning_point_fixed_point_func(x, index, l, l_group, R_sun, c_sound_spline_func):
+    omega = 2*np.pi*l_group[index]['freq'].real*10**(-6)   # in Hz
+    return omega**2/(l*(l+1))-(c_sound_spline_func(x))**2/(x*R_sun)**2
+
+
 def main():
     # Initialize configuration handler
     config = ConfigHandler("config.ini")
 
     # Initialize data directory of GME
     DATA_DIR = os.path.join(os.path.dirname(__file__), 'Output', config.get("ModelConfig", "model_name"), 'GeneralMatrixElements')
-
-    # Compare Eigenspaces
-    delta_freq_quadrat = config.getfloat("Eigenspace", "delta_freq_quadrat")  #microHz^2
-    compare_eigenspace = True
-
-    if compare_eigenspace:
-        # reference multiplet:
-        l, n = 5, 18
-        print(f'Reference Frequency of multiplet (l={l}, n={n}): ', frequencies_GYRE(l, n), ' microHz')
-        print(f'Eigenspace width: ', delta_freq_quadrat, ' microHz^2')
-        # Eigenspace
-        K_space_full = eigenspace(l, n, delta_freq_quadrat, eigentag='Full')
-        print('Full: ', len(K_space_full), K_space_full)
-
-        K_space_1approx = eigenspace(l, n, delta_freq_quadrat, eigentag='FirstApprox')
-        print('First Approx: ', len(K_space_1approx), K_space_1approx)
-
-        K_space_selfcoupling = eigenspace(l, n, delta_freq_quadrat, 'SelfCoupling')
-        print('Only Self-Coupling: ', len(K_space_selfcoupling), K_space_selfcoupling)
 
     # Initialize stellar model (MESA data)
     mesa_data = radial_kernels.MesaData(config=config)
@@ -625,6 +641,32 @@ def main():
     magnetic_field_s = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s, radius_array=mesa_data.radius_array)
     magnetic_field_sprime = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=sprime, radius_array=mesa_data.radius_array)
 
+    ######################################
+    # Compare Eigenspaces
+    delta_freq_quadrat = config.getfloat("Eigenspace", "delta_freq_quadrat")  #microHz^2
+    compare_eigenspace = False
+
+    # Create first approximation data
+    summary_dir = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE', config.get("StellarModel", "summary_GYRE_path"))
+    r_t = lower_turning_points(summary_dir, mesa_data)
+    first_app = first_approx(r_t, magnetic_field_s)
+
+    if compare_eigenspace:
+        # reference multiplet:
+        l, n = 9, 13
+        print(f'Reference Frequency of multiplet (l={l}, n={n}): ', frequencies_GYRE(l, n), ' microHz')
+        print(f'Eigenspace width: ', delta_freq_quadrat, ' microHz^2')
+        # Eigenspace
+        K_space_full = eigenspace(l, n, delta_freq_quadrat, eigentag='Full')
+        print('Full: ', len(K_space_full), K_space_full)
+
+        K_space_1approx = eigenspace(l, n, delta_freq_quadrat, eigentag='FirstApprox', first_approx_data=first_app)
+        print('First Approx: ', len(K_space_1approx), K_space_1approx)
+
+        K_space_selfcoupling = eigenspace(l, n, delta_freq_quadrat, 'SelfCoupling')
+        print('Only Self-Coupling: ', len(K_space_selfcoupling), K_space_selfcoupling)
+
+    ######################################
     # Test General Matrix Elements
     test_gme = False
     if test_gme:
@@ -645,6 +687,7 @@ def main():
         elapsed_time = end_time - start_time
         print('Elapsed time in seconds: ', elapsed_time)
 
+    ######################################
     # Investigate hdf5 files:
     investigate_hdf = False
     if investigate_hdf:
@@ -657,6 +700,7 @@ def main():
         # Merge hdf5 files of same reference multiplet (l, n):
         # hdf5_merger(l=5, n=2, config.get("ModelConfig", "model_name"), max_retries=20, retry_interval=10)
 
+    ######################################
     # Search for modes within a given frequency interval
     search_eigenspace = False
     if search_eigenspace:
@@ -667,21 +711,21 @@ def main():
         n_len2, n_len2_quadrat = 0,0
         n_len3, n_len3_quadrat = 0,0
         n_len_larger, n_len_larger_quadrat = 0,0
-        for l in range(2, 15):  # (0,150)
+        for l in range(2, 20):  # (0,150)
             for n in range(0, 36):  # (0,36)
                 try:
-                    K_space = eigenspace_mode_search(l,n, freq_interval)
-                    K_space_quadrat = eigenspace(l, n, delta_freq_quadrat, eigentag='FirstApprox')
+                    K_space = eigenspace_mode_search(l,n, freq_interval, first_app)
+                    K_space_quadrat = eigenspace(l, n, delta_freq_quadrat, eigentag='FirstApprox', first_approx_data=first_app)
                     if len(K_space) > 1:
                         if len(K_space) == 2:
                             n_len2 += 1
-                            print('K',K_space)
+                            #print('K',K_space)
                         elif len(K_space) == 3:
                             n_len3 += 1
-                            print('K',K_space)
+                            #print('K',K_space)
                         else:
                             n_len_larger += 1
-                            print('K',K_space)
+                            #print('K',K_space)
 
                     if len(K_space_quadrat) > 1:
                         if len(K_space_quadrat) == 2:
@@ -689,7 +733,7 @@ def main():
                             #print('K_qua',K_space_quadrat)
                         elif len(K_space_quadrat) == 3:
                             n_len3_quadrat += 1
-                            #print('K_qua',K_space_quadrat)
+                            print('K_qua',K_space_quadrat)
                         else:
                             n_len_larger_quadrat += 1
                             print('K_qua',K_space_quadrat)
@@ -703,6 +747,16 @@ def main():
         print('Eigenspace quadrat with length 3: ',n_len3_quadrat)
         print('Eigenspace quadrat with length larger 3: ',n_len_larger_quadrat)
 
+    ######################################
+    # Filter lower turning point
+    lower_tp = False
+    if lower_tp:
+        l = 66
+        n = 1
+        filtered_r_ltp = r_t[(l, n)]['r_ltp']
+        print(f"Lower turning point for (l,n) = ({l}, {n}):", filtered_r_ltp)
+
+    ######################################
     # Test Kiefer and Roth 2018 approximation
     test_kiefer = False
     if test_kiefer:

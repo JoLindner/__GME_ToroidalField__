@@ -5,9 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import SymLogNorm
 from matplotlib.colors import ListedColormap
 from config import ConfigHandler
-import pygyre as pg
-from scipy import optimize
-import scipy.interpolate
 import radial_kernels
 import glob
 import re
@@ -184,7 +181,7 @@ def plot_frequency_shifts_overlaid(l_list, n_list, path, eigentag, save=False):
     plt.show()
 
 
-def plot_frequency_shifts_fixed_value(fixed_l, fixed_n, path, eigentag, save=False):
+def plot_frequency_shifts_fixed_value(fixed_l, fixed_n, path, eigentag, abs_shift=False, save=False):
     if fixed_l is not None:
         fixed_value = fixed_l
         variable_name = 'l'
@@ -246,7 +243,10 @@ def plot_frequency_shifts_fixed_value(fixed_l, fixed_n, path, eigentag, save=Fal
         l_flat = np.array([l for l, m_sublist in zip(value_list, m_list) for _ in m_sublist])
         m = np.array([m for sublist in m_list for m in sublist])
         x = np.array([m / l for m, l in zip(m, l_flat)])
-    y = np.array([rel for sublist in relative_shift_list for rel in sublist])
+    if abs_shift:
+        y = np.array([abs_shift for sublist in freq_shift_list for abs_shift in sublist])
+    else:
+        y = np.array([rel for sublist in relative_shift_list for rel in sublist])
     z = np.array(sum([[v] * len(m_list[i]) for i, v in enumerate(value_list)], []))
 
     plt.figure(figsize=(12, 8))
@@ -268,17 +268,17 @@ def plot_frequency_shifts_fixed_value(fixed_l, fixed_n, path, eigentag, save=Fal
 
     plt.gca().tick_params(axis='both', which='major', labelsize=14)
     plt.xlabel('$m / l$', size=16)
-    plt.ylabel('Relative Frequency Shift', size=16)
+    plt.ylabel('Relative Frequency Shift' if not abs_shift else 'Absolute Frequency Shift', size=16)
     plt.title(f'Frequency Shifts for fixed {variable_name}={fixed_value}', size=18)
     if save:
         output_dir = os.path.join(os.path.dirname(__file__), 'Images')
         os.makedirs(output_dir, exist_ok=True)
-        DATA_DIR = os.path.join(output_dir, f'Relative_frequency_shifts_fixed_{variable_name}={fixed_value}.png')
+        DATA_DIR = os.path.join(output_dir, f'Relative_frequency_shifts_fixed_{variable_name}={fixed_value}.png'if not abs_shift else f'Absolute_frequency_shifts_fixed_{variable_name}={fixed_value}.png')
         plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
     plt.show()
 
 
-def plot_frequency_shifts_4d(path, eigentag, save=False):
+def plot_frequency_shifts_4d_experimental(path, eigentag, save=False):
     name_string = f'freq_shifts_*_*_{{}}.txt'
     regex_pattern = re.compile(r'freq_shifts_(.*?)_(.*?)_(?:full|first_approx|self_coupling)\.txt')
 
@@ -330,21 +330,21 @@ def plot_frequency_shifts_4d(path, eigentag, save=False):
     freq_shift_flat = np.array([shift for shift_sublist in freq_shift_list for shift in shift_sublist])
 
     # Define axes
-    y = freq_flat
-    x = m_flat
+    y = l_flat
+    x = m_flat/ l_flat
     z = freq_shift_flat
-    color = l_flat
+    color = freq_flat
 
     # 3D plot with colorbar
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection='3d')
-    plt.gca().invert_yaxis()
+    #plt.gca().invert_yaxis()
 
     scatter = ax.scatter(x, y, z, c=color, cmap='gnuplot', edgecolor='k', alpha=0.8)
 
     # Adding colorbar for l
     colorbar = plt.colorbar(scatter)
-    colorbar.set_label('$l$', size=16)
+    #colorbar.set_label('$l$', size=16)
     colorbar.ax.tick_params(labelsize=14)
 
     # Labels and Title
@@ -359,48 +359,151 @@ def plot_frequency_shifts_4d(path, eigentag, save=False):
     if save:
         output_dir = os.path.join(os.path.dirname(__file__), 'Images')
         os.makedirs(output_dir, exist_ok=True)
+        DATA_DIR = os.path.join(output_dir, '4D_Frequency_shifts_test.png')
+        plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
+
+    plt.show()
+
+
+def plot_frequency_shifts_4d(path, eigentag, save=False):
+    name_string = f'freq_shifts_*_*_{{}}.txt'
+    regex_pattern = re.compile(r'freq_shifts_(.*?)_(.*?)_(?:full|first_approx|self_coupling)\.txt')
+
+    if eigentag is None or eigentag == 'Full':
+        eigentag_str = 'full'
+    elif eigentag == 'FirstApprox':
+        eigentag_str = 'first_approx'
+    elif eigentag == 'SelfCoupling':
+        eigentag_str = 'self_coupling'
+    else:
+        raise ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
+
+    file_path_pattern = os.path.join(path, name_string.format(eigentag_str))
+    file_paths = glob.glob(file_path_pattern)
+
+    try:
+        data_list = []
+        freq_shift_list = []
+        m_list = []
+        n_list = []
+        l_list = []
+        freq_list = []
+        relative_shift_list = []
+
+        # Load and process data from the files
+        for i, paths in enumerate(file_paths):
+            match = regex_pattern.search(os.path.basename(paths))
+            if match:
+                l_list.append(int(match.group(1)))
+                n_list.append(int(match.group(2)))
+
+            data = np.loadtxt(paths, comments='#', delimiter=' ')
+            data_list.append(data)
+            freq_list.append(GMEP.frequencies_GYRE(l_list[i], n_list[i]) * 10 ** 3)  # nHz
+            freq_shift_list.append(data[:, 0])  # nHz
+            relative_shift_list.append(freq_shift_list[i] / freq_list[i])
+            m_list.append(data[:, 3])
+
+    except FileNotFoundError:
+        print(f"Error: Loading data from {file_path_pattern} failed.")
+        raise FileNotFoundError
+
+    # Flatten data
+    m_flat = np.array([m for sublist in m_list for m in sublist])
+    l_flat = np.array([l for l, m_sublist in zip(l_list, m_list) for _ in m_sublist])
+    n_flat = np.array([n for n, m_sublist in zip(n_list, m_list) for _ in m_sublist])
+    #freq_flat = np.array([freq*10**(-3) for freq, m_sublist in zip(freq_list, m_list) for _ in m_sublist])  # in microHz
+    #relative_shift_flat = np.array([rel for rel_sublist in relative_shift_list for rel in rel_sublist])
+    freq_shift_flat = np.array([shift for shift_sublist in freq_shift_list for shift in shift_sublist])
+
+    # Define axes
+    y = l_flat
+    x = m_flat / l_flat
+    z = freq_shift_flat
+    #color = freq_flat
+    color = n_flat
+
+    # 3D plot with colorbar
+    fig = plt.figure(figsize=(12, 12))
+    ax = fig.add_subplot(111, projection='3d')
+    #plt.gca().invert_yaxis()
+
+    scatter = ax.scatter(x, y, z, c=color, cmap='gnuplot', edgecolor='k', alpha=0.8, s=20, linewidths=0.3)
+    ax.view_init(elev=20, azim=-65)
+    # Adding colorbar
+    colorbar = plt.colorbar(scatter, shrink=0.64, pad=0.07)
+    #colorbar.set_label(r'$\nu$ in $\mu$Hz', size=16)
+    colorbar.set_label(r'radial order $n$', size=16)
+    colorbar.ax.tick_params(labelsize=14)
+
+    # Limits
+    ax.set_xlim(-1.05, 1.05)
+    ax.set_ylim(2, 140)
+    ax.set_zlim(0, max(z) * 1.1)
+
+    # Labels and Title
+    ax.set_xlabel('$m / l$', size=16, labelpad=10)
+    ax.set_ylabel('harmonic degree $l$', size=16, labelpad=10)
+    ax.set_zlabel('Frequency Shift (nHz)', size=16, labelpad=10)
+    #ax.set_title('m-resolved frequency shifts', size=18)
+
+    ax.tick_params(axis='both', which='major', labelsize=14)
+
+    # Saving the plot if requested
+    if save:
+        output_dir = os.path.join(os.path.dirname(__file__), 'Images')
+        os.makedirs(output_dir, exist_ok=True)
         DATA_DIR = os.path.join(output_dir, '4D_Frequency_shifts.png')
         plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
 
     plt.show()
 
 
-def plot_output_summary(l_list, n_list, path, eigentag, lower_tp=None, r_thresh=None, save=False):
-    # Load lower turning points
-    lower_turning_points_dict = {(int(l), int(n)): r_ltp for l, n, r_ltp in lower_tp} if lower_tp is not None else {}
+def plot_output_summary(path, eigentag, lower_tp=None, r_thresh=None, save=False):
+    # Load data path pattern
+    name_string = f'freq_shifts_*_*_{{}}.txt'
+    regex_pattern = re.compile(r'freq_shifts_(.*?)_(.*?)_(?:full|first_approx|self_coupling)\.txt')
+
+    if eigentag is None or eigentag == 'Full':
+        eigentag_str = 'full'
+    elif eigentag == 'FirstApprox':
+        eigentag_str = 'first_approx'
+    elif eigentag == 'SelfCoupling':
+        eigentag_str = 'self_coupling'
+    else:
+        raise ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
+
+    file_path_pattern = os.path.join(path, name_string.format(eigentag_str))
+    file_paths = glob.glob(file_path_pattern)
 
     # Load data
-    frequency_shifts = []
-    averaged_shifts = []
-    for i in range(len(l_list)):
-        if eigentag is None or eigentag == 'Full':
-            name_string = f'freq_shifts_{l_list[i]}_{n_list[i]}_full.txt'
-        elif eigentag == 'FirstApprox':
-            name_string = f'freq_shifts_{l_list[i]}_{n_list[i]}_first_approx.txt'
-        elif eigentag == 'SelfCoupling':
-            name_string = f'freq_shifts_{l_list[i]}_{n_list[i]}_self_coupling.txt'
-        else:
-            # Raise an error if the eigen_tag is invalid
-            raise ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
-        file_path = os.path.join(path, name_string)
+    try:
+        frequency_shifts = []
+        averaged_shifts = []
 
-        try:
-            frequency_shifts.append(np.loadtxt(file_path, comments='#', delimiter=' '))
+        # Load and process data from the files
+        for i, paths in enumerate(file_paths):
+            match = regex_pattern.search(os.path.basename(paths))
+            if match:
+                l = int(match.group(1))
+                n = int(match.group(2))
 
-            rtp_value = lower_turning_points_dict.get((int(l_list[i]), int(n_list[i])), None)
+            frequency_shifts.append(np.loadtxt(paths, comments='#', delimiter=' '))
+
+            rtp_value = lower_tp.get((l, n))['r_ltp'] if (l, n) in lower_tp else None
 
             averaged_shifts_dict = {
-                'l': l_list[i],
-                'n': n_list[i],
-                'freq': GMEP.frequencies_GYRE(l_list[i], n_list[i]),
+                'l': l,
+                'n': n,
+                'freq': GMEP.frequencies_GYRE(l, n),
                 'av_shift': np.mean(frequency_shifts[i][:, 0]),
                 'rtp': rtp_value
             }
             averaged_shifts.append(averaged_shifts_dict)
 
-        except FileNotFoundError:
-            #print(f"Error: Unable to load {file_path}")
-            continue
+    except FileNotFoundError:
+        print(f"Error: Loading data from {file_path_pattern} failed.")
+        raise FileNotFoundError
 
     freq_values = [entry['freq'] for entry in averaged_shifts]
     av_shifts = [entry['av_shift'] for entry in averaged_shifts]
@@ -426,6 +529,7 @@ def plot_output_summary(l_list, n_list, path, eigentag, lower_tp=None, r_thresh=
     colors = scatter.cmap(scatter.norm(unique_l))
     for l_value, color in zip(unique_l, colors):
         subset_indices = [i for i, val in enumerate(l_values) if val == l_value]
+        subset_indices.sort(key=lambda idx: averaged_shifts[idx]['n'])
         plt.plot(np.array(rtp_values if lower_tp is not None else freq_values)[subset_indices], np.array(av_shifts)[subset_indices], color=color, alpha=0.5, linewidth=1)
 
     if lower_tp is not None and r_thresh is not None:
@@ -442,41 +546,6 @@ def plot_output_summary(l_list, n_list, path, eigentag, lower_tp=None, r_thresh=
             DATA_DIR = os.path.join(output_dir, f'Freq_shift_summary.pdf')
         plt.savefig(DATA_DIR, dpi=300, bbox_inches='tight')
     plt.show()
-
-
-def lower_turning_points(path_to_summary_file, mesa_data):
-    # Read in summary file
-    summary_file = pg.read_output(path_to_summary_file)
-    l_group = summary_file.group_by('l')
-
-    # Cubic Spline of sound speed
-    c_sound_spline = scipy.interpolate.CubicSpline(mesa_data.radius_array, mesa_data.c_sound,
-                                                   bc_type='natural')
-    c_sound_spline_func = lambda x: c_sound_spline(x)
-
-    # R_sun
-    R_sun = mesa_data.R_sun
-
-    # Lower turning point computation
-    results = []
-    i = 0
-    # print(optimize.root_scalar(lower_turning_point_fixed_point_func,method='secant', x0=0.5, bracket=[0,1], args=(l,n)))
-    for l in l_group['l']:
-        if l != 0:  # omit radial oscillations
-            n_pg = l_group[i]['n_pg']
-            if n_pg != 0:  # omit f modes
-                r_ltp = optimize.root_scalar(lower_turning_point_fixed_point_func, method='toms748', x0=0.5,
-                                             bracket=[0.001, 1], args=(i, l, l_group, R_sun, c_sound_spline_func))
-                results.append((int(l), int(n_pg), r_ltp.root))
-        i += 1
-    lower_tp = np.array(results, dtype=object)
-
-    return lower_tp
-
-
-def lower_turning_point_fixed_point_func(x, index, l, l_group, R_sun, c_sound_spline_func):
-    omega = 2*np.pi*l_group[index]['freq'].real*10**(-6)   # in Hz
-    return omega**2/(l*(l+1))-(c_sound_spline_func(x))**2/(x*R_sun)**2
 
 
 def plot_supermatrix(l, n, trunc=None, path=None, eigentag='FirstApprox', save=False):
@@ -663,7 +732,7 @@ def main():
     rel_shifts = True   # Use this for rel. freq shift over m/l
     abs_shifts = False   # Only useful for low l
     combined = False     # Only useful for low l
-    l, n = 5, 6
+    l, n = 16, 13
     save = False
 
     # Load eigentag
@@ -702,77 +771,60 @@ def main():
     # Plot output summary: Plots frequency shift over multiplet frequency or lower turning point (if given)
     output_summary = False
     comp_rt = False
-    r_thresh = 0.863
     save = False
 
     # Compute lower turning points
     # Initialize stellar model (MESA data)
     mesa_data = radial_kernels.MesaData(config=config)
+    # Initialize magnetic field parameters:
+    B_max = config.getfloat("MagneticFieldModel", "B_max")
+    mu = config.getfloat("MagneticFieldModel", "mu")
+    sigma = config.getfloat("MagneticFieldModel", "sigma")
+    s = config.getint("MagneticFieldModel", "s")
+    # Initialize the magnetic field model
+    magnetic_field_s = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s, radius_array=mesa_data.radius_array)
+    # Initialize path to GYRE summary files
     summary_dir = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE', config.get("StellarModel", "summary_GYRE_path"))
     if comp_rt:
-        r_t = lower_turning_points(summary_dir, mesa_data)
+        r_t = GMEP.lower_turning_points(summary_dir, mesa_data)
+        # Compute 3 sigma range of magnetic field:
+        r_thresh = GMEP.first_approx(r_t, magnetic_field_s)['r_thresh']
+        if r_thresh > mesa_data.radius_array[-1]:
+            r_thresh = None
     else:
         r_t = None
+        r_thresh = None
 
     if output_summary:
-        # Create tuple list of l and n
-        l_list, n_list = [], []
-        for l in range(2, 140+1):
-            for n in range(0, 35+1):
-                criterium_large = (128 <= l < 138 and n >= 13) or (
-                        118 <= l < 128 and n >= 12) or (
-                                          108 <= l < 118 and n >= 11) or (
-                                          98 <= l < 108 and n >= 10) \
-                                  or (88 <= l < 98 and n >= 9) or (
-                                          79 <= l < 88 and n >= 8) or (
-                                          69 <= l < 79 and n >= 7) \
-                                  or (60 <= l < 69 and n >= 6) or (
-                                          51 <= l < 60 and n >= 5) or (
-                                          42 <= l < 51 and n >= 4) \
-                                  or (31 <= l < 42 and n >= 3) or (
-                                          20 <= l < 31 and n >= 2) or l <= 19 and n >= 1
-                freq_temp = GMEP.frequencies_GYRE(l,n)
-                if eigentag is None or eigentag == 'Full':
-                    name_string = f'freq_shifts_{l}_{n}_full.txt'
-                elif eigentag == 'FirstApprox':
-                    name_string = f'freq_shifts_{l}_{n}_first_approx.txt'
-                elif eigentag == 'SelfCoupling':
-                    name_string = f'freq_shifts_{l}_{n}_self_coupling.txt'
-                else:
-                    # Raise an error if the eigen_tag is invalid
-                    raise ValueError('Unknown eigenspace tag. Use "Full", "FirstApprox" or "SelfCoupling".')
-                file_path = os.path.join(freq_dir, name_string)
-                if freq_temp is not None and criterium_large and os.path.exists(file_path):
-                    l_list.append(l)
-                    n_list.append(n)
-        plot_output_summary(l_list, n_list, freq_dir, eigentag, r_t, r_thresh, save)
+        plot_output_summary(freq_dir, eigentag, r_t, r_thresh, save)
 
     ######################################
     # Plot overlaid frequency shifts fixed l
     plot_overlaid_fixed_l = False
     plot_overlaid_fixed_n = False
-    fix_l = 13
-    fix_n = 13
-    save = False
+    fix_l = 66
+    fix_n = 16
+    abs_shift = True
+    save = True
     if plot_overlaid_fixed_l:
         fix_n = None
-        plot_frequency_shifts_fixed_value(fix_l, fix_n, freq_dir, eigentag, save)
+        plot_frequency_shifts_fixed_value(fix_l, fix_n, freq_dir, eigentag, abs_shift, save)
     if plot_overlaid_fixed_n:
         fix_l = None
-        plot_frequency_shifts_fixed_value(fix_l, fix_n, freq_dir, eigentag, save)
+        plot_frequency_shifts_fixed_value(fix_l, fix_n, freq_dir, eigentag, abs_shift, save)
 
     ######################################
     # Plot overlaid frequency shifts 4d
     plot_overlaid_4d = False
-    save = False
+    save = True
     if plot_overlaid_4d:
         plot_frequency_shifts_4d(freq_dir, eigentag, save)
 
     ######################################
     # Plot supermatrix
     plot_sm = False
-    l = 42
-    n = 11
+    l = 16
+    n = 18
     trunc = None   # Number of multiplets excluded from the supermatrix plot; truncates starting from the highest l
     save = False
     if plot_sm:

@@ -7,7 +7,7 @@ import time
 from config import ConfigHandler
 
 
-def calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat,magnetic_field_s, magnetic_field_sprime=None, eigentag=None, mesa_data=None):
+def calculate_freq_shift_quasi_degenerate(l, n, delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime=None, eigentag=None, mesa_data=None, first_approx_data=None):
     try:
         start_time = time.time()
 
@@ -15,7 +15,7 @@ def calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat,magnetic_field_
             magnetic_field_sprime = magnetic_field_s
 
         # Create eigenspace
-        K_space = GMEP.eigenspace(l,n,delta_freq_quadrat, eigentag)
+        K_space = GMEP.eigenspace(l, n, delta_freq_quadrat, eigentag, first_approx_data)
 
         # Create and Save index map
         index_map = GMEP.create_index_map(l, n, K_space)
@@ -57,10 +57,10 @@ def main():
     # Use NEW model_name for ALL parameter changes (except eigenspace_tag and [Range] settings)
     config = ConfigHandler("config.ini")
 
-    #Load Model name
+    # Load Model name
     model_name = config.get("ModelConfig", "model_name")
 
-    #Create Directories
+    # Create Output Directories
     output_dir = os.path.join(os.path.dirname(__file__), 'Output')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -104,9 +104,15 @@ def main():
     magnetic_field_s = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s, radius_array=mesa_data.radius_array)
     magnetic_field_sprime = radial_kernels.MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=sprime, radius_array=mesa_data.radius_array)
 
-    #eigenspace width and eigentag
+    # Eigenspace width and eigentag
     delta_freq_quadrat = config.getfloat("Eigenspace", "delta_freq_quadrat")  #microHz^2
     eigentag = config.get("Eigenspace", "eigenspace_tag")
+
+    # Compute lower turning points for first approximation
+    if eigentag == 'FirstApprox':
+        summary_dir = os.path.join(os.path.dirname(__file__), 'Data', 'GYRE', config.get("StellarModel", "summary_GYRE_path"))
+        r_t = GMEP.lower_turning_points(summary_dir, mesa_data)
+        first_app = GMEP.first_approx(r_t, magnetic_field_s)
 
     # Load the range for l and n
     l_min = config.getint("Range", "l_min")
@@ -114,45 +120,21 @@ def main():
     n_min = config.getint("Range", "n_min")
     n_max = config.getint("Range", "n_max")
 
-
     # Compute frequency shifts for all multiplets in l, n parameterspace defined in [Range] given a specific eigenspace tag (Full, FirstApprox or SelfCoupling)
     for l in range(l_min, l_max+1):
         for n in range(n_min, n_max+1):
-            # Excludes multiplets which do not penetrate into effective magnetic field range
             if eigentag == 'FirstApprox':
-                # Note: WORKS only for Sun and MagneticFieldModel at the base of the convection zone (B_max = 300, mu = 0.713, sigma = 0.05, s = 2)
-                criterium = (128 <= l < 138 and n >= 13) or (
-                        118 <= l < 128 and n >= 12) or (
-                                          108 <= l < 118 and n >= 11) or (
-                                          98 <= l < 108 and n >= 10) \
-                                  or (88 <= l < 98 and n >= 9) or (
-                                          79 <= l < 88 and n >= 8) or (
-                                          69 <= l < 79 and n >= 7) \
-                                  or (60 <= l < 69 and n >= 6) or (
-                                          51 <= l < 60 and n >= 5) or (
-                                          42 <= l < 51 and n >= 4) \
-                                  or (31 <= l < 42 and n >= 3) or (
-                                          20 <= l < 31 and n >= 2) or l <= 19 and n >= 1
-            else:
-                criterium = True
+                # Excludes multiplets which do not penetrate into effective magnetic field range from computation
+                if (l, n) not in first_app['multiplets']:
+                    continue
 
-            if GMEP.frequencies_GYRE(l,n) is not None and criterium:
+            if GMEP.frequencies_GYRE(l,n) is not None:
                 print(f'Computing multiplet l={l}, n={n}, freq={GMEP.frequencies_GYRE(l,n)} microHz with eigenspace tag {eigentag}')
-                calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime, eigentag=eigentag, mesa_data=mesa_data)
-
+                calculate_freq_shift_quasi_degenerate(l, n, delta_freq_quadrat, magnetic_field_s, magnetic_field_sprime,
+                                                      eigentag=eigentag, mesa_data=mesa_data,
+                                                      first_approx_data=first_app if eigentag == 'FirstApprox' else None)
 
     print(f'All multiplets finished.')
-
-
-    '''
-    #For master thesis
-    l = 5
-    n = [6,12,18]
-
-    for value in n:
-        print(f'Computing l={l}, n={value}, freq={GMEP.frequencies_GYRE(l,value)} microHz')
-        calculate_freq_shift_quasi_degenerate(l,n,delta_freq_quadrat, magnetic_field_s, eigentag=eigentag)
-    '''
 
 
 if __name__ == '__main__':
