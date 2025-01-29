@@ -1,8 +1,6 @@
-astropy==4.1
-matplotlib==3.3.4
-mesa-reader==0.3.5
-numpy==1.19.5
-pygyre==1.3.2
-scipy==1.5.4
-sympy==1.9
-bsddb3
+numpy>=2.2,<3.0
+scipy>=1.15,<2.0
+sympy>=1.13,<2.0
+pygyre>=1.4,<2.0
+matplotlib>=3.10,<4.0
+mesa-reader>=0.3.5,<1.0
