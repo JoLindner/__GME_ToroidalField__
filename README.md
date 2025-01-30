@@ -134,6 +134,7 @@ source comput_main_env/bin/activate
 - `test_angular_kernels`: Computes individual angular kernel values.
 
 ### Database Structure
+- GMEs are stored in HDF5 files. Each thread writes its own temporary HDF5 file, and these files are merged into the main HDF5 database after completing the computation of the supermatrix.
 - All General Matrix Elements (GMEs) are indexed by `(l, n, m, l', n', m')`.
 - Only non-zero GMEs are stored, ensuring coupling occurs only when selection rules are satisfied.
 
