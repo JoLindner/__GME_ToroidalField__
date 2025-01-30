@@ -765,7 +765,7 @@ def main():
         if os.path.isfile(temp_path):
             os.remove(temp_path)
 
-        l, n, m = 5, 6, 1
+        l, n, m = 5, 18, 0
         lprime, nprime, mprime = l, n, m
         angular_freq = 2 * np.pi * frequencies_GYRE(l, n)  # microHz
 

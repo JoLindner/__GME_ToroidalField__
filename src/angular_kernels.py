@@ -552,6 +552,7 @@ class AngularKernels:
 
 
 def main():
+    ######################################
     # Test angular kernels
     test_angular_kernels = False
     if test_angular_kernels:

@@ -704,8 +704,8 @@ def main():
     # Initialize stellar model (MESA data)
     mesa_data = MesaData(config=config)
 
-    # plot mesa_data
-    #mesa_data.plot_rho_deriv(save=False)
+    # Extract radius_array from MESA class
+    radius_array = mesa_data.radius_array
 
     # Initialize magnetic field model:
     B_max = config.getfloat("MagneticFieldModel", "B_max")
@@ -716,19 +716,31 @@ def main():
     magnetic_field_s = MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=s, radius_array=mesa_data.radius_array)
     magnetic_field_sprime = MagneticField(B_max=B_max, mu=mu, sigma=sigma, s=sprime, radius_array=mesa_data.radius_array)
 
+    ######################################
+    # plot mesa_data
+    plot_mesa_data = False
+    save = False
+
+    if plot_mesa_data:
+        mesa_data.plot_rho_deriv(save=save)
+
+    ######################################
     # Plot magnetic field models
-    #magnetic_field_s.plot_B(save=False)
-    #magnetic_field_s.plot_a_deriv(save=False)
-    #magnetic_field_sprime.plot_B(save=False)
-    #magnetic_field_sprime.plot_a_deriv(save=False)
+    plot_magnetic_field = False
+    plot_sprime = False
 
-    # Extract radius_array from MESA class
-    radius_array = mesa_data.radius_array
+    if plot_magnetic_field:
+        magnetic_field_s.plot_B(save=False)
+        magnetic_field_s.plot_a_deriv(save=False)
+        if plot_sprime:
+            magnetic_field_sprime.plot_B(save=False)
+            magnetic_field_sprime.plot_a_deriv(save=False)
 
-
+    ######################################
     # Test and Plot Radial Kernels
     test_radial_kernels = False
     plot_kernel = False
+    xlimit = (0.7, 1)
 
     if test_radial_kernels:
         start_time = time.time()
@@ -748,22 +760,26 @@ def main():
 
         if plot_kernel:
             # Plot all radial kernels
-            radialkernel_obj.plot_all_radialKernels(xlim=(0.7, 1))
+            radialkernel_obj.plot_all_radialKernels(xlim=xlimit, save=False)
 
             # Plot single Radial Kernels
             for i in range(1,9):
-                radialkernel_obj.plot_single_radial_kernel(i)
+                radialkernel_obj.plot_single_radial_kernel(i, save=False)
 
+    ######################################
     # Plot comparison of Radial Kernels
     compare = False
     split = False  # Makes two separate files each containing 4 radial kernels
+    save = False
+    xlimit = (0.563, 0.9)
+
     if compare:
         # l=5, n=12 radial kernels:
         l = [5, 5, 5, 5, 5]
         n = [12, 12, 12, 12, 12]
         lprime = [5, 38, 94, 141, 237]
         nprime = [12, 6, 3, 2, 1]
-        plot_several_radialKernels(l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime=None, mesa_data=None, xlim=(0.563, 0.9), split=split, save=False)
+        plot_several_radialKernels(l, n, lprime, nprime, radius_array, magnetic_field_s, magnetic_field_sprime=magnetic_field_sprime, mesa_data=mesa_data, xlim=xlimit, split=split, save=save)
 
         # Other List Examples
         '''
@@ -781,8 +797,10 @@ def main():
 
         '''
 
+    ######################################
     # Plot Eigenfunctions
     plot_eigenfunctions = False
+
     if plot_eigenfunctions:
         l = 6
         n = 2
@@ -790,6 +808,6 @@ def main():
         eigenfunctions(l, n, radius_array, plot_eigenfunction=True, plot_deriv=False, plot_diff=False)
 
 
-if __name__== '__main__':
+if __name__ == '__main__':
     main()
     
