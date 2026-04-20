@@ -2,7 +2,8 @@
 
 ## Citation
 If you use this code, please cite:
-**Lindner and Roth (2025)**: *"A Revised Expression for the General Matrix Element of the Direct Effect of a Toroidal Magnetic Field on Stellar Oscillations"* (in progress).
+**Lindner and Roth (2026)**: *The direct effect of a toroidal magnetic field on stellar oscillations - A revised expression for the general matrix element* (A&A, 707 (2026) A133)
+DOI: https://doi.org/10.1051/0004-6361/202554413
 
 ## Contact
 For any bugs, problems, or questions, please don't hesitate to contact me at: jlindner@tls-tautenburg.de
